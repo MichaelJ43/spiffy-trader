@@ -196,39 +196,57 @@ export async function monitorAndTrade() {
         failureCount++;
       }
 
+      if (!analysis) {
+        await couchRequest("POST", "/news", {
+          ...item,
+          sentiment: "Unknown",
+          impactScore: 0,
+          reasoning: "AI Analysis unavailable (Check API Key or Ollama connection).",
+          ...(relatedPersist.length > 0 ? { relatedStories: relatedPersist } : {})
+        });
+        continue;
+      }
+
       const decision = normalizeTradeDecisionAnalysis(analysis);
       if (!decision) {
         failureCount++;
+        await couchRequest("POST", "/news", {
+          ...item,
+          sentiment: "Unknown",
+          impactScore: 0,
+          reasoning: "AI Analysis returned an invalid JSON shape.",
+          ...(relatedPersist.length > 0 ? { relatedStories: relatedPersist } : {})
+        });
+        continue;
       }
 
-      if (decision) {
-        analysisCount++;
-        const newsPayload = {
-          ...item,
-          sentiment: decision.sentiment,
-          impactScore: decision.impactScore,
-          relevanceScore: decision.relevanceScore,
-          edgeScore: decision.edgeScore,
-          scratchpad: decision.scratchpad,
-          relatedNarrativeVerdict: decision.relatedNarrativeVerdict,
-          relatedNarrativeWhatChanged: decision.relatedNarrativeWhatChanged,
-          reasoning: decision.reasoning,
-          suggestedTicker: decision.suggestedTicker,
-          shouldTrade: decision.shouldTrade,
-          tradeAmount: decision.tradeAmount,
-          sourceConfidenceScore: sourceScore,
-          ...(relatedPersist.length > 0 ? { relatedStories: relatedPersist } : {})
-        };
-        const postRes = await couchRequest("POST", "/news", newsPayload);
-        if (postRes?.id) {
-          existingNews.unshift({
-            _id: postRes.id,
-            _rev: postRes.rev,
-            ...newsPayload
-          });
-        }
+      analysisCount++;
+      const newsPayload = {
+        ...item,
+        sentiment: decision.sentiment,
+        impactScore: decision.impactScore,
+        relevanceScore: decision.relevanceScore,
+        edgeScore: decision.edgeScore,
+        scratchpad: decision.scratchpad,
+        relatedNarrativeVerdict: decision.relatedNarrativeVerdict,
+        relatedNarrativeWhatChanged: decision.relatedNarrativeWhatChanged,
+        reasoning: decision.reasoning,
+        suggestedTicker: decision.suggestedTicker,
+        shouldTrade: decision.shouldTrade,
+        tradeAmount: decision.tradeAmount,
+        sourceConfidenceScore: sourceScore,
+        ...(relatedPersist.length > 0 ? { relatedStories: relatedPersist } : {})
+      };
+      const postRes = await couchRequest("POST", "/news", newsPayload);
+      if (postRes?.id) {
+        existingNews.unshift({
+          _id: postRes.id,
+          _rev: postRes.rev,
+          ...newsPayload
+        });
+      }
 
-        const reasoningKey = getReasoningKey(decision.reasoning || "");
+      const reasoningKey = getReasoningKey(decision.reasoning || "");
         const reasoningScore = blendRecencyPrior(
           reasoningRatingStats.get(reasoningKey),
           50,
@@ -241,7 +259,7 @@ export async function monitorAndTrade() {
         );
 
         const wantsTrade = decision.shouldTrade === true;
-        const suggestedRaw = decision.suggestedTicker;
+        const suggestedRaw = String(decision.suggestedTicker ?? "").trim();
         const tickerAllowed =
           suggestedRaw !== "" && allowedTickerSet.size > 0 && allowedTickerSet.has(suggestedRaw);
 
@@ -249,7 +267,7 @@ export async function monitorAndTrade() {
         const affordableCap = maxAffordableNotionalWorstCase(botStatus.cashBalance);
         const rawAmt = decision.tradeAmount;
         let resolvedAmount: number | null = null;
-        if (rawAmt !== null && rawAmt !== undefined) {
+        if (rawAmt != null) {
           const n = typeof rawAmt === "number" ? rawAmt : Number(rawAmt);
           if (Number.isFinite(n)) {
             resolvedAmount = clamp(n, 0, Math.min(balanceCap, affordableCap));
@@ -339,15 +357,6 @@ export async function monitorAndTrade() {
             }
           }
         }
-      } else {
-        await couchRequest("POST", "/news", {
-          ...item,
-          sentiment: "Unknown",
-          impactScore: 0,
-          reasoning: "AI Analysis unavailable (Check API Key or Ollama connection).",
-          ...(relatedPersist.length > 0 ? { relatedStories: relatedPersist } : {})
-        });
-      }
     }
 
     await resolveTrades();

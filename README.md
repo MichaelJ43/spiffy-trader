@@ -11,7 +11,7 @@
 
 - **RSS pipeline** — Polls feeds you configure (a built-in seed list plus sources the model may discover) and stores items in a local database.
 - **Market curation** — For each headline, narrows to relevant open markets using embeddings when [Ollama](https://ollama.com) is available, or token overlap as a fallback.
-- **LLM decisions** — Ollama is the primary path; optional **Gemini** can back up generation. The model returns structured JSON: a short **scratchpad** (headline fit, fees/cash, **why not trading** when skipping), separate **relevance** and **edge** scores (0–100), optional **same narrative / new fact** labeling when overlapping headlines exist, plus trade/sentiment/reasoning. **Impact** in the UI is the average of relevance and edge. Related items can include the **prior simulated decision** (pass vs trade and summary) so follow-up headlines reuse context.
+- **LLM decisions** — Ollama is the primary path; optional **Gemini** can back up generation. The model returns structured JSON: a short **scratchpad** (headline fit, fees/cash, **why not trading** when skipping), separate **relevance** and **edge** scores (0–100), optional **same narrative / new fact** labeling when overlapping headlines exist, plus trade/sentiment/reasoning. **Impact** in the UI is a **relevance-heavy blend** (70% relevance, 30% edge) so it stays closer to the old headline-importance scale; **edge** alone is often low when a story is priced in. Related items can include the **prior simulated decision** (pass vs trade and summary) so follow-up headlines reuse context. Prompts stress capital preservation and fees.
 - **Simulated execution** — Fills at the current YES mid from Kalshi data, applies an estimated taker-style fee, and tracks P&L and settlement in the sim. If portfolio value effectively hits zero, background work pauses until you fund the sim again and resume.
 - **Optional Kalshi WebSocket** — If you set `KALSHI_ACCESS_KEY_ID` and a private key (`KALSHI_PRIVATE_KEY_PATH` or `KALSHI_PRIVATE_KEY_PEM`), the app subscribes to ticker updates for **OPEN** positions and **active `market_watchlist` rows** (union capped by `KALSHI_WS_MAX_SUBSCRIBED_TICKERS`; positions win when over the cap). Use the same Kalshi environment for REST and WS (see `.env.example`). This does not place real orders; it feeds mids into snapshots for the sim.
 
@@ -24,7 +24,8 @@
 - Portfolio value and cash, with open YES positions marked to mids when snapshots exist.
 - A performance chart (replay-style) over selectable windows.
 - Execution history with links to the Kalshi site for comparison.
-- **News sidebar** — sentiment plus **Impact** (average of model relevance and edge) and, when present, **Rel · Edge** breakdown.
+- **News sidebar** — sentiment plus **Impact** (70/30 relevance–edge blend; see LLM bullet) and, when present, **Rel · Edge** breakdown.
+
 - **Force Analysis** (run a monitoring pass early) and **Force sell all** (close simulated positions at mid or settlement where applicable).
 
 In-app **Documentation** (same content as `src/components/DocumentationPage.tsx`) expands on fees, risk, and limitations.

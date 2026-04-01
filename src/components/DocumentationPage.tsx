@@ -63,7 +63,11 @@ export default function DocumentationPage({ onBack }: Props) {
               <span className="text-white/90">same narrative</span> vs a <span className="text-white/90">new fact</span>
               . Those related rows can include the <span className="text-white/90">last simulated decision</span>{" "}
               (pass or trade and a short summary) so the model does not ignore a recent pass without new information.
-              The dashboard <span className="text-white/90">Impact</span> figure is the average of relevance and edge.
+              The dashboard <span className="text-white/90">Impact</span> figure is a{" "}
+              <span className="text-white/90">70% relevance / 30% edge</span> blend so it tracks headline
+              importance more like the old single score—edge is often low on its own when there is no clear
+              tradable mispricing. The prompt stresses capital preservation, fees, and not running the simulated
+              account to zero.
             </li>
             <li>
               <span className="text-white/90">Simulates execution</span> at the current YES mid from
@@ -99,7 +103,7 @@ export default function DocumentationPage({ onBack }: Props) {
             </li>
             <li>
               <span className="text-white/90">News feed</span> — each card shows sentiment,{" "}
-              <span className="text-white/90">Impact</span> (avg of model relevance and edge), and when
+              <span className="text-white/90">Impact</span> (70% relevance / 30% edge blend), and when
               stored, <span className="text-white/90">Rel · Edge</span> percentages separately.
             </li>
             <li>

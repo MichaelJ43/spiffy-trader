@@ -28,7 +28,7 @@ describe("normalizeTradeDecisionAnalysis", () => {
       reasoning: "Go."
     });
     expect(out).not.toBeNull();
-    expect(out!.impactScore).toBe(60);
+    expect(out!.impactScore).toBe(68); // 0.7*80 + 0.3*40
     expect(out!.relevanceScore).toBe(80);
     expect(out!.edgeScore).toBe(40);
     expect(out!.relatedNarrativeVerdict).toBe("new_fact");
