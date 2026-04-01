@@ -13,8 +13,8 @@ import { kalshiMarketEmbeddingByTicker, setKalshiMarketsCache } from "../../src/
 import { curateMarketsForNews } from "../../src/kalshi/curate.js";
 
 const pool = [
-  { ticker: "KX-A", title: "Fed raises rates", event_ticker: "EVT" },
-  { ticker: "KX-B", title: "Unrelated sports", event_ticker: "EVT2" }
+  { ticker: "KX-A", title: "Fed raises rates", event_ticker: "EVT", volume_24h: 50 },
+  { ticker: "KX-B", title: "Unrelated sports", event_ticker: "EVT2", volume_24h: 30 }
 ];
 
 describe("curateMarketsForNews", () => {
@@ -36,5 +36,17 @@ describe("curateMarketsForNews", () => {
 
   it("returns empty pool as empty", async () => {
     expect(await curateMarketsForNews("x", [], 3)).toEqual([]);
+  });
+
+  it("excludes zero-activity markets from curation", async () => {
+    kalshiMarketEmbeddingByTicker.clear();
+    const mixed = [
+      { ticker: "DEAD", title: "Fed policy match", volume_24h: 0, volume: 0, open_interest: 0 },
+      { ticker: "LIVE", title: "Fed policy rates", volume_24h: 100, volume: 200, open_interest: 10 }
+    ];
+    kalshiMarketEmbeddingByTicker.set("LIVE", [1, 0, 0]);
+    const out = await curateMarketsForNews("Fed policy news", mixed, 5);
+    expect(out.some((m) => m.ticker === "DEAD")).toBe(false);
+    expect(out.some((m) => m.ticker === "LIVE")).toBe(true);
   });
 });

@@ -74,6 +74,15 @@ export default function DocumentationPage({ onBack }: Props) {
               Kalshi data: cash decreases by notional plus an estimated taker-style fee; P&amp;L and
               settlement follow the same toy math as you hold or exit positions.
             </li>
+            <li>
+              <span className="text-white/90">Optional Kalshi WebSocket</span> — with API key ID and RSA
+              private key in env (see <span className="font-mono text-xs text-orange-400/90">.env.example</span>
+              ), the server can stream ticker updates for <span className="text-white/90">OPEN</span> positions
+              and tickers on your <span className="text-white/90">market_watchlist</span>, merged up to a cap (
+              <span className="font-mono text-xs text-orange-400/90">KALSHI_WS_MAX_SUBSCRIBED_TICKERS</span>
+              ). This only refreshes mids for the sim; it does not send orders. Point REST and WS at the same
+              Kalshi environment (e.g. both production or both demo).
+            </li>
           </ul>
         </section>
 
@@ -121,8 +130,14 @@ export default function DocumentationPage({ onBack }: Props) {
           <p className="text-sm text-white/75 leading-relaxed">
             Everything runs against a <span className="text-white/90">local CouchDB</span> (or whatever
             you point <span className="font-mono text-xs text-orange-400/90">COUCHDB_URL</span> at): trades,
-            news, bot status, RSS source records, and a cached snapshot of open Kalshi markets. No
-            cloud-hosted app database is required for the default setup.
+            news, bot status, RSS source records, chunked open-market cache, and a{" "}
+            <span className="text-white/90">market_watchlist</span> database for tickers you want tracked
+            (e.g. for WebSocket subscription with OPEN positions). Human-readable JSON sketches of names and
+            shapes live under <span className="font-mono text-xs text-orange-400/90">src/db/</span> (
+            <span className="font-mono text-[10px] text-orange-400/80">local-db-config.json</span>,{" "}
+            <span className="font-mono text-[10px] text-orange-400/80">local-db-blueprint.json</span>); the app
+            uses <span className="font-mono text-xs text-orange-400/90">src/db.ts</span> for the actual runtime
+            database map. No cloud-hosted app database is required for the default setup.
           </p>
         </section>
 
@@ -133,6 +148,16 @@ export default function DocumentationPage({ onBack }: Props) {
               orders, no real money at risk in the app.</li>
             <li>Models can be wrong; the UI is for experimentation and learning, not financial advice.</li>
             <li>Open-market cache and embeddings depend on local services (Ollama, Couch) being up.</li>
+            <li>
+              WebSocket and signed REST features need Kalshi credentials in env; without them the bot still
+              uses the public Kalshi API for listings and mids where implemented.
+            </li>
+            <li>
+              Docker Desktop: if CouchDB logs show corruption (<span className="font-mono text-[10px]">enoent</span>
+              / 500 on <span className="font-mono text-[10px]">_all_docs</span>), recreate the{" "}
+              <span className="text-white/90">couchdb_data</span> volume after bringing the stack down—local DB
+              content in that volume is reset.
+            </li>
           </ul>
         </section>
       </main>

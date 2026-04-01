@@ -1,5 +1,9 @@
+import type { RelatedStoryPromptSlice } from "../news/related-stories.js";
 import { KALSHI_TAKER_FEE_COEFFICIENT } from "./fees.js";
 import type { KalshiMarketLite } from "./types.js";
+
+/** @deprecated Use RelatedStoryPromptSlice; kept alias for imports */
+export type RelatedStoryBrief = RelatedStoryPromptSlice;
 
 export type TradeDecisionContext = {
   /** 0–100 heuristic from RSS source historical quality (not from the headline). */
@@ -10,6 +14,11 @@ export type TradeDecisionContext = {
   tradingBootstrap: boolean;
   /** Current simulated balance — max dollars allocatable on a new trade. */
   availableBalance: number;
+  /**
+   * Recent stored headlines with high token overlap and close timestamps (same narrative).
+   * Used to avoid double-counting stale angles; a clearly new development can still justify action.
+   */
+  relatedStories?: RelatedStoryPromptSlice[];
 };
 
 /** Structured scratchpad inside the LLM JSON (Ollama `format: "json"` allows one object only). */
@@ -201,7 +210,7 @@ export function buildKalshiTradeDecisionPrompt(
   curated: KalshiMarketLite[],
   ctx: TradeDecisionContext
 ): string {
-  const hasRelated = false;
+  const hasRelated = Boolean(ctx.relatedStories && ctx.relatedStories.length > 0);
 
   if (curated.length === 0) {
     return `You are deciding whether a simulated Kalshi trade should open from this headline. No candidate markets are loaded.
@@ -212,20 +221,41 @@ Context: confidenceScore=${ctx.confidenceScore} (RSS source track record only), 
 
 **Priority:** The simulation ends badly if cash hits zero—you must NOT run out of money. With no markets here, do not trade.
 
-Return JSON only with the full schema below. Use relevanceScore 0, edgeScore 0, shouldTrade false, empty suggestedTicker, tradeAmount null, scratchpad filled honestly, and set reasoning to state that no candidate markets are available (e.g. "No markets available.").
+Return ONE JSON object only (no markdown). Use relevanceScore 0, edgeScore 0, shouldTrade false, empty suggestedTicker, tradeAmount null, scratchpad filled honestly, and set reasoning to state that no candidate markets are available (e.g. "No markets available."). Fill every key like the shape below; use null only where shown.
 
 ${tradeDecisionJsonSchemaExample(hasRelated, itemContent, { zeroScores: true })}`;
   }
 
   const candidatesPayload = curated.map((m) => ({
     t: m.ticker,
-    d: (m.title || "").slice(0, 220)
+    d: (m.title || "").slice(0, 220),
+    v24: m.volume_24h ?? 0,
+    vol: m.volume ?? 0,
+    oi: m.open_interest ?? 0
   }));
   const candidatesJson = JSON.stringify(candidatesPayload);
 
+  const relatedBlock = hasRelated
+    ? `
+
+**Possibly related headlines already in memory** (token overlap % and hours apart — these are heuristics, not ground truth). Each item may include **priorShouldTrade**, **priorSuggestedTicker**, and **priorDecisionSummary**: reuse that context so you do not contradict a recent pass without a **new_fact**, and do not re-buy the same stale thesis unless something material changed.
+${JSON.stringify(ctx.relatedStories)}
+
+You **must** set \`relatedNarrativeVerdict\` and \`relatedNarrativeWhatChanged\`:
+- **same_narrative**: same story thread with no material new fact that would change a fair price; usually dampen **edgeScore**.
+- **new_fact**: a clear incremental development vs the related excerpts; **edgeScore** may be higher if the market likely has not fully adjusted.
+- **unclear**: cannot tell — be conservative on **edgeScore** and often **shouldTrade: false**.
+`
+    : "";
+
   return `You are the trading agent for a Kalshi simulation. You must decide whether to open a YES position and how large, using ONLY the evidence below.
 
+Work **stepwise inside the JSON**: fill \`scratchpad\` first (factual and cautious; **whyNotTrading** when skipping), then narrative verdict fields (if applicable), then **relevanceScore** and **edgeScore**, then \`shouldTrade\` / \`suggestedTicker\` / \`tradeAmount\` / \`sentiment\` / \`reasoning\`. The server only accepts valid JSON — your entire reply must be one JSON object.
+
 **TOP PRIORITY — DO NOT RUN OUT OF MONEY:** The bot halts if portfolio value collapses; going to ~$0 is a failure mode you must actively avoid. Treat **capital preservation** as more important than squeezing every headline for action. Prefer **shouldTrade: false** or **small tradeAmount** when edge is unclear, fees eat the trade, or available cash is low (${ctx.availableBalance.toFixed(2)}). Never behave as if you have unlimited bankroll—leave a **cash buffer** (do not deploy everything on one headline unless conviction and edge are exceptionally strong). If in doubt, **skip the trade.**
+
+**Market activity:** Each candidate includes **v24** (24h volume, contracts), **vol** (lifetime volume), and **oi** (open interest). Markets with **higher v24 and oi** tend to have more trading interest, tighter price discovery, and better odds of moving to a fair price and exiting without getting stuck in a dead tape. When headline fit is similar between tickers, **prefer more active markets** (higher v24 / oi). Candidates with all zeros are not passed to you—the list is already filtered to markets with some activity.
+${relatedBlock}
 
 Headline: ${JSON.stringify(itemContent)}
 
@@ -240,20 +270,21 @@ Signals passed to you (do not ignore them, but you make the final decision):
 
 Scores (0–100 integers):
 - **relevanceScore**: how **material** the headline is for the **best-matching** candidate contract—importance of the news **plus** how well it maps to that market (wrong ticker → low even if the headline is loud). Calibrate like the old single “impact” for UX: consequential stories that clearly tie to a listed market are usually **~40–85**; only weak or off-topic fits belong below **~30**.
-- **edgeScore**: conditional on relevance, how much **actionable** mispricing vs likely consensus / Kalshi YES. This is often **lower** than relevance when the move is priced in, fees dominate edge, or the narrative is stale—**that is expected** and does not force relevance down.
+- **edgeScore**: conditional on relevance, how much **actionable** mispricing vs likely consensus / Kalshi YES. Use **low edge** if the information is probably priced in or redundant (**same_narrative**). This is often **lower** than relevance when the move is priced in, fees dominate edge, or the narrative is stale—**that is expected** and does not force relevance down.
 - **Do not** copy numbers from the JSON template below. **relevanceScore** and **edgeScore** must reflect **this** headline and your chosen ticker. Use **both 0** only if no candidate market fits at all; otherwise typical news has mixed scores (relevance often **mid–high**, edge varies).
 
 Rules:
 - **scratchpad**: complete all four fields before deciding. **whyNotTrading** must be non-empty when shouldTrade is false (unless you already said everything in reasoning—then a short echo is fine); use "" when shouldTrade is true.
-- **relatedNarrativeVerdict** / **relatedNarrativeWhatChanged**: in this prompt there is no related-headline block—set both to null.
-- shouldTrade: true only if you want a new simulated position **and** the trade still makes sense after fees and bankroll risk (see TOP PRIORITY above).
+- **relatedNarrativeVerdict** / **relatedNarrativeWhatChanged**: if there is **no** “Possibly related headlines” section above, set both to **null**. If that section **is** present, set verdict and what-changed per its instructions (do not leave them null).
+- shouldTrade: true only if you want a new simulated position **and** the trade still makes sense after fees and bankroll risk (see TOP PRIORITY above). High **relevanceScore** alone is not enough — need **edgeScore** that clears fees and uncertainty.
 - Open positions are reviewed on a timer: the bot may exit early at the then-current YES mid, or hold until Kalshi settlement. Trade size and conviction can reflect whether you intend a shorter scalp or a hold-to-resolution thesis.
 - suggestedTicker: must be exactly one "t" from the list, or "".
-- **Trading fees (simulated Kalshi taker-style):** On each buy, cash drops by **tradeAmount + fee**, not just tradeAmount. Estimated taker fee ≈ **${(KALSHI_TAKER_FEE_COEFFICIENT * 100).toFixed(2)}% × tradeAmount × (1 − YES_price_at_fill)**, with YES price in 0–1 (same as Kalshi’s P×(1−P) weighting: **highest near 50¢ YES**, much lower near 0¢ or 99¢). Fees are rounded up to cents. **Low-conviction or tiny-edge trades lose a visible slice to fees—skip or size smaller when expected edge does not clear fees.** Your tradeAmount limit is before fees; the server reserves headroom so notional + worst-case fee does not exceed cash.
+- **Trading fees (simulated Kalshi taker-style):** On each buy, cash drops by **tradeAmount + fee**, not just tradeAmount. Estimated taker fee ≈ **${(KALSHI_TAKER_FEE_COEFFICIENT * 100).toFixed(2)}% × tradeAmount × (1 − YES_price_at_fill)**, with YES price in 0–1 (same as Kalshi’s P×(1−P) weighting: **highest near 50¢ YES**, much lower near 0¢ or 99¢). Fees are rounded up to cents. **Low edge trades lose to fees—skip or size smaller.** Your tradeAmount limit is before fees; the server reserves headroom so notional + worst-case fee does not exceed cash.
 - tradeAmount: dollars of notional to allocate from 0 up to a safe cap below availableBalance (${ctx.availableBalance.toFixed(2)}) after fee headroom, or null if shouldTrade is false. Prefer **granular** dollar amounts (not only round tens). **Do not** pick a tradeAmount that assumes zero fees. **Bias toward smaller size** when balance is modest or uncertainty is high.
 - sentiment: Positive | Negative | Neutral
 - reasoning: concise synthesis tying scratchpad, scores, and trade decision together.
 
-Return ONLY valid JSON matching this shape (illustrative numbers—compute your own for this headline):
+Return ONE JSON object only, matching this shape. **Replace every example string and number** (including **relevanceScore** and **edgeScore**) with values derived from the headline above—not literal copies of the template.
+
 ${tradeDecisionJsonSchemaExample(hasRelated, itemContent)}`;
 }

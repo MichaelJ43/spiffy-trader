@@ -9,10 +9,13 @@ import {
   recencyWeightedRatingStatsByKey
 } from "../lib/trade-ratings.js";
 import { checkOllamaReachable } from "../ollama/embed.js";
+import { getNewsSourcesWeighted } from "../performance/news-sources.js";
+import { buildRelatedStoryPromptSlice, findRelatedNewsStories } from "../news/related-stories.js";
 import {
-  applyRssFetchStats,
-  getNewsSourcesWeighted
-} from "../performance/news-sources.js";
+  applyRssFetchFailureWithBackoff,
+  applyRssFetchSuccessWithBackoff,
+  planRssFetchAttempt
+} from "../rss/backoff.js";
 import { fetchRssFeed } from "../rss/fetch.js";
 import { curateMarketsForNews } from "../kalshi/curate.js";
 import { ensureKalshiMarketsCache } from "../kalshi/cache.js";
@@ -76,7 +79,7 @@ export async function monitorAndTrade() {
     const reasoningRatingStats = recencyWeightedRatingStatsByKey(historicalTrades, (t) =>
       getReasoningKey(t.reasoning || "") || null
     );
-    const existingNews = await listDocs("news");
+    const existingNews: any[] = await listDocs("news");
     const rssSourceDocsByUrl = new Map<string, any>();
     for (const d of await listDocs("news_sources")) {
       const row = d as any;
@@ -90,6 +93,27 @@ export async function monitorAndTrade() {
     const feedResults = await Promise.all(
       sortedSources.map(async (source) => {
         const couchDoc = rssSourceDocsByUrl.get(source.url);
+        const nowMs = Date.now();
+        if (!couchDoc?._id) {
+          try {
+            const feed = await fetchRssFeed(source.url);
+            return feed.items.slice(0, 2).map((item) => ({
+              source: feed.title || "RSS Feed",
+              sourceUrl: source.url,
+              content: `${item.title}: ${item.contentSnippet || item.content}`,
+              timestamp: item.pubDate || new Date().toISOString(),
+              link: item.link
+            }));
+          } catch {
+            return [];
+          }
+        }
+        const { doc: readyDoc, shouldFetch } = planRssFetchAttempt(couchDoc, nowMs);
+        if (!shouldFetch) {
+          await couchRequest("PUT", `/news_sources/${readyDoc._id}`, readyDoc);
+          rssSourceDocsByUrl.set(source.url, readyDoc);
+          return [];
+        }
         try {
           const feed = await fetchRssFeed(source.url);
           const latestItems = feed.items.slice(0, 2).map((item) => ({
@@ -99,18 +123,14 @@ export async function monitorAndTrade() {
             timestamp: item.pubDate || new Date().toISOString(),
             link: item.link
           }));
-          if (couchDoc?._id) {
-            const updated = applyRssFetchStats(couchDoc, true);
-            await couchRequest("PUT", `/news_sources/${updated._id}`, updated);
-            rssSourceDocsByUrl.set(source.url, updated);
-          }
+          const updated = applyRssFetchSuccessWithBackoff(readyDoc);
+          await couchRequest("PUT", `/news_sources/${updated._id}`, updated);
+          rssSourceDocsByUrl.set(source.url, updated);
           return latestItems;
         } catch {
-          if (couchDoc?._id) {
-            const updated = applyRssFetchStats(couchDoc, false);
-            await couchRequest("PUT", `/news_sources/${updated._id}`, updated);
-            rssSourceDocsByUrl.set(source.url, updated);
-          }
+          const updated = applyRssFetchFailureWithBackoff(readyDoc, nowMs);
+          await couchRequest("PUT", `/news_sources/${updated._id}`, updated);
+          rssSourceDocsByUrl.set(source.url, updated);
           return [];
         }
       })
@@ -135,6 +155,17 @@ export async function monitorAndTrade() {
     for (const item of newItems) {
       if (botStatus.portfolioHalted) break;
 
+      const relatedRaw = findRelatedNewsStories(existingNews, item.content, item.timestamp);
+      const newsById = new Map(existingNews.map((n: any) => [n._id, n]));
+      const relatedForPrompt = relatedRaw.map((r) =>
+        buildRelatedStoryPromptSlice(r, newsById.get(r.id))
+      );
+      const relatedPersist = relatedRaw.map((r) => ({
+        newsId: r.id,
+        overlapPercent: r.overlapPercent,
+        deltaMs: r.deltaMs
+      }));
+
       const curatedMarkets = await curateMarketsForNews(
         item.content,
         kalshiOpenMarketsCache,
@@ -149,7 +180,8 @@ export async function monitorAndTrade() {
         confidenceScore: sourceScore,
         feedWeight,
         tradingBootstrap,
-        availableBalance: Math.max(0, botStatus.cashBalance)
+        availableBalance: Math.max(0, botStatus.cashBalance),
+        relatedStories: relatedForPrompt.length > 0 ? relatedForPrompt : undefined
       });
 
       console.log(
@@ -165,37 +197,56 @@ export async function monitorAndTrade() {
       }
 
       if (!analysis) {
-        failureCount++;
-      }
-
-      if (analysis) {
-        const decision = normalizeTradeDecisionAnalysis(analysis);
-        if (!decision) {
-          failureCount++;
-          await couchRequest("POST", "/news", {
-            ...item,
-            sentiment: "Unknown",
-            impactScore: 0,
-            reasoning: "AI Analysis returned an invalid JSON shape."
-          });
-          continue;
-        }
-
-        analysisCount++;
         await couchRequest("POST", "/news", {
           ...item,
-          sentiment: decision.sentiment,
-          impactScore: decision.impactScore,
-          relevanceScore: decision.relevanceScore,
-          edgeScore: decision.edgeScore,
-          reasoning: decision.reasoning,
-          suggestedTicker: decision.suggestedTicker,
-          shouldTrade: decision.shouldTrade,
-          tradeAmount: decision.tradeAmount,
-          sourceConfidenceScore: sourceScore
+          sentiment: "Unknown",
+          impactScore: 0,
+          reasoning: "AI Analysis unavailable (Check API Key or Ollama connection).",
+          ...(relatedPersist.length > 0 ? { relatedStories: relatedPersist } : {})
         });
+        continue;
+      }
 
-        const reasoningKey = getReasoningKey(decision.reasoning || "");
+      const decision = normalizeTradeDecisionAnalysis(analysis);
+      if (!decision) {
+        failureCount++;
+        await couchRequest("POST", "/news", {
+          ...item,
+          sentiment: "Unknown",
+          impactScore: 0,
+          reasoning: "AI Analysis returned an invalid JSON shape.",
+          ...(relatedPersist.length > 0 ? { relatedStories: relatedPersist } : {})
+        });
+        continue;
+      }
+
+      analysisCount++;
+      const newsPayload = {
+        ...item,
+        sentiment: decision.sentiment,
+        impactScore: decision.impactScore,
+        relevanceScore: decision.relevanceScore,
+        edgeScore: decision.edgeScore,
+        scratchpad: decision.scratchpad,
+        relatedNarrativeVerdict: decision.relatedNarrativeVerdict,
+        relatedNarrativeWhatChanged: decision.relatedNarrativeWhatChanged,
+        reasoning: decision.reasoning,
+        suggestedTicker: decision.suggestedTicker,
+        shouldTrade: decision.shouldTrade,
+        tradeAmount: decision.tradeAmount,
+        sourceConfidenceScore: sourceScore,
+        ...(relatedPersist.length > 0 ? { relatedStories: relatedPersist } : {})
+      };
+      const postRes = await couchRequest("POST", "/news", newsPayload);
+      if (postRes?.id) {
+        existingNews.unshift({
+          _id: postRes.id,
+          _rev: postRes.rev,
+          ...newsPayload
+        });
+      }
+
+      const reasoningKey = getReasoningKey(decision.reasoning || "");
         const reasoningScore = blendRecencyPrior(
           reasoningRatingStats.get(reasoningKey),
           50,
@@ -254,6 +305,8 @@ export async function monitorAndTrade() {
               sourceUrl: item.sourceUrl,
               currentPnL: 0,
               impactScore: decision.impactScore,
+              relevanceScore: decision.relevanceScore,
+              edgeScore: decision.edgeScore,
               confidenceScore: Number(recordConfidence.toFixed(2)),
               sourcePerformanceScore: Number(sourceScore.toFixed(2)),
               reasoningPerformanceScore: Number(reasoningScore.toFixed(2)),
@@ -266,6 +319,9 @@ export async function monitorAndTrade() {
                   timestamp: item.timestamp,
                   link: item.link || "",
                   impactScore: decision.impactScore,
+                  relevanceScore: decision.relevanceScore,
+                  edgeScore: decision.edgeScore,
+                  relatedNarrativeVerdict: decision.relatedNarrativeVerdict,
                   sentiment: decision.sentiment
                 }
               ]
@@ -301,14 +357,6 @@ export async function monitorAndTrade() {
             }
           }
         }
-      } else {
-        await couchRequest("POST", "/news", {
-          ...item,
-          sentiment: "Unknown",
-          impactScore: 0,
-          reasoning: "AI Analysis unavailable (Check API Key or Ollama connection)."
-        });
-      }
     }
 
     await resolveTrades();
