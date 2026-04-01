@@ -45,6 +45,13 @@ describe("getNewsSourcesWeighted", () => {
     expect(w[0].url).toContain("reuters");
     expect(w[0].weight).toBeGreaterThan(0);
   });
+
+  it("uses low tabloid seed prior (30) when no trade history for that source", async () => {
+    vi.mocked(listDocs).mockResolvedValueOnce([{ _id: "1", url: "https://www.tmz.com/rss.xml" }]);
+    const w = await getNewsSourcesWeighted([]);
+    expect(w).toHaveLength(1);
+    expect(w[0].recencyScore).toBe(30);
+  });
 });
 
 describe("buildPerformanceSnapshot", () => {

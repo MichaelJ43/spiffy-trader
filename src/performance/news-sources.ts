@@ -1,8 +1,6 @@
 import {
   clamp,
-  NON_SEED_SOURCE_DEFAULT_RECENCY_SCORE,
-  SEED_NEWS_SOURCE_URL_SET,
-  SEED_SOURCE_DEFAULT_RECENCY_SCORE,
+  defaultRecencyPriorForNewsSourceUrl,
   SOURCE_RATING_HALF_LIFE_DAYS,
   SOURCE_RATING_PRIOR_MIN_TRADES
 } from "../server/config.js";
@@ -47,9 +45,7 @@ export async function getNewsSourcesWeighted(trades: any[]): Promise<NewsSourceW
   const sourceRatingStats = recencyWeightedRatingStatsByKey(trades, (t) => t.sourceUrl || null);
   return urls.map((url) => {
     const doc = docByUrl.get(url);
-    const prior = SEED_NEWS_SOURCE_URL_SET.has(url)
-      ? SEED_SOURCE_DEFAULT_RECENCY_SCORE
-      : NON_SEED_SOURCE_DEFAULT_RECENCY_SCORE;
+    const prior = defaultRecencyPriorForNewsSourceUrl(url);
     const recencyScore = blendRecencyPrior(
       sourceRatingStats.get(url),
       prior,
