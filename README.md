@@ -11,11 +11,7 @@
 
 - **RSS pipeline** — Polls feeds you configure (a built-in seed list plus sources the model may discover) and stores items in a local database.
 - **Market curation** — For each headline, narrows to relevant open markets using embeddings when [Ollama](https://ollama.com) is available, or token overlap as a fallback.
-<<<<<<< Updated upstream
-- **LLM decisions** — Ollama is the primary path; optional **Gemini** can back up generation. The model returns structured choices (trade or not, ticker, size, sentiment, reasoning), with prompts oriented around capital preservation and fees.
-=======
-- **LLM decisions** — Ollama is the primary path; optional **Gemini** can back up generation. The model returns structured JSON: a short **scratchpad** (headline fit, fees/cash, **why not trading** when skipping), separate **relevance** and **edge** scores (0–100), optional **same narrative / new fact** labeling when overlapping headlines exist, plus trade/sentiment/reasoning. **Impact** in the UI is a **relevance-heavy blend** (70% relevance, 30% edge) so it stays closer to the old headline-importance scale; **edge** alone is often low when a story is priced in. Related items can include the **prior simulated decision** (pass vs trade and summary) so follow-up headlines reuse context.
->>>>>>> Stashed changes
+- **LLM decisions** — Ollama is the primary path; optional **Gemini** can back up generation. The model returns structured JSON: a short **scratchpad** (headline fit, fees/cash, **why not trading** when skipping), separate **relevance** and **edge** scores (0–100), optional **same narrative / new fact** labeling when overlapping headlines exist, plus trade/sentiment/reasoning. **Impact** in the UI is a **relevance-heavy blend** (70% relevance, 30% edge) so it stays closer to the old headline-importance scale; **edge** alone is often low when a story is priced in. Related items can include the **prior simulated decision** (pass vs trade and summary) so follow-up headlines reuse context. Prompts stress capital preservation and fees.
 - **Simulated execution** — Fills at the current YES mid from Kalshi data, applies an estimated taker-style fee, and tracks P&L and settlement in the sim. If portfolio value effectively hits zero, background work pauses until you fund the sim again and resume.
 
 ## What you see in the UI
@@ -27,10 +23,8 @@
 - Portfolio value and cash, with open YES positions marked to mids when snapshots exist.
 - A performance chart (replay-style) over selectable windows.
 - Execution history with links to the Kalshi site for comparison.
-<<<<<<< Updated upstream
-=======
 - **News sidebar** — sentiment plus **Impact** (70/30 relevance–edge blend; see LLM bullet) and, when present, **Rel · Edge** breakdown.
->>>>>>> Stashed changes
+
 - **Force Analysis** (run a monitoring pass early) and **Force sell all** (close simulated positions at mid or settlement where applicable).
 
 In-app **Documentation** (same content as `src/components/DocumentationPage.tsx`) expands on fees, risk, and limitations.

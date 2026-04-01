@@ -12,10 +12,6 @@ export type TradeDecisionContext = {
   availableBalance: number;
 };
 
-<<<<<<< Updated upstream
-/**
- * One LLM call: model decides whether to trade, size, ticker, and qualitative fields.
-=======
 /** Structured scratchpad inside the LLM JSON (Ollama `format: "json"` allows one object only). */
 export type TradeDecisionScratchpad = {
   whatTheHeadlineAsserts: string;
@@ -198,7 +194,6 @@ function tradeDecisionJsonSchemaExample(
 
 /**
  * One LLM call: structured scratchpad, narrative disambiguation, relevance/edge scores, then trade fields.
->>>>>>> Stashed changes
  * Server enforces curated tickers and clamps size to [0, availableBalance].
  */
 export function buildKalshiTradeDecisionPrompt(
@@ -206,6 +201,8 @@ export function buildKalshiTradeDecisionPrompt(
   curated: KalshiMarketLite[],
   ctx: TradeDecisionContext
 ): string {
+  const hasRelated = false;
+
   if (curated.length === 0) {
     return `You are deciding whether a simulated Kalshi trade should open from this headline. No candidate markets are loaded.
 
@@ -215,8 +212,9 @@ Context: confidenceScore=${ctx.confidenceScore} (RSS source track record only), 
 
 **Priority:** The simulation ends badly if cash hits zero—you must NOT run out of money. With no markets here, do not trade.
 
-Return JSON only:
-{ "shouldTrade": false, "suggestedTicker": "", "tradeAmount": null, "impactScore": 0, "sentiment": "Neutral", "reasoning": "No markets available." }`;
+Return JSON only with the full schema below. Use relevanceScore 0, edgeScore 0, shouldTrade false, empty suggestedTicker, tradeAmount null, scratchpad filled honestly, and set reasoning to state that no candidate markets are available (e.g. "No markets available.").
+
+${tradeDecisionJsonSchemaExample(hasRelated, itemContent, { zeroScores: true })}`;
   }
 
   const candidatesPayload = curated.map((m) => ({
@@ -240,23 +238,22 @@ Signals passed to you (do not ignore them, but you make the final decision):
 - tradingBootstrap: ${ctx.tradingBootstrap} (few rated closed trades yet; be appropriately cautious if true)
 - **availableBalance (cash before this trade): ${ctx.availableBalance.toFixed(2)}** — size and frequency must keep the account viable; avoid bet-the-farm sizing.
 
-<<<<<<< Updated upstream
-=======
 Scores (0–100 integers):
 - **relevanceScore**: how **material** the headline is for the **best-matching** candidate contract—importance of the news **plus** how well it maps to that market (wrong ticker → low even if the headline is loud). Calibrate like the old single “impact” for UX: consequential stories that clearly tie to a listed market are usually **~40–85**; only weak or off-topic fits belong below **~30**.
 - **edgeScore**: conditional on relevance, how much **actionable** mispricing vs likely consensus / Kalshi YES. This is often **lower** than relevance when the move is priced in, fees dominate edge, or the narrative is stale—**that is expected** and does not force relevance down.
 - **Do not** copy numbers from the JSON template below. **relevanceScore** and **edgeScore** must reflect **this** headline and your chosen ticker. Use **both 0** only if no candidate market fits at all; otherwise typical news has mixed scores (relevance often **mid–high**, edge varies).
 
->>>>>>> Stashed changes
 Rules:
+- **scratchpad**: complete all four fields before deciding. **whyNotTrading** must be non-empty when shouldTrade is false (unless you already said everything in reasoning—then a short echo is fine); use "" when shouldTrade is true.
+- **relatedNarrativeVerdict** / **relatedNarrativeWhatChanged**: in this prompt there is no related-headline block—set both to null.
 - shouldTrade: true only if you want a new simulated position **and** the trade still makes sense after fees and bankroll risk (see TOP PRIORITY above).
 - Open positions are reviewed on a timer: the bot may exit early at the then-current YES mid, or hold until Kalshi settlement. Trade size and conviction can reflect whether you intend a shorter scalp or a hold-to-resolution thesis.
 - suggestedTicker: must be exactly one "t" from the list, or "".
 - **Trading fees (simulated Kalshi taker-style):** On each buy, cash drops by **tradeAmount + fee**, not just tradeAmount. Estimated taker fee ≈ **${(KALSHI_TAKER_FEE_COEFFICIENT * 100).toFixed(2)}% × tradeAmount × (1 − YES_price_at_fill)**, with YES price in 0–1 (same as Kalshi’s P×(1−P) weighting: **highest near 50¢ YES**, much lower near 0¢ or 99¢). Fees are rounded up to cents. **Low-conviction or tiny-edge trades lose a visible slice to fees—skip or size smaller when expected edge does not clear fees.** Your tradeAmount limit is before fees; the server reserves headroom so notional + worst-case fee does not exceed cash.
 - tradeAmount: dollars of notional to allocate from 0 up to a safe cap below availableBalance (${ctx.availableBalance.toFixed(2)}) after fee headroom, or null if shouldTrade is false. Prefer **granular** dollar amounts (not only round tens). **Do not** pick a tradeAmount that assumes zero fees. **Bias toward smaller size** when balance is modest or uncertainty is high.
-- impactScore: your 0–100 view of market-moving strength of this news for the chosen market.
 - sentiment: Positive | Negative | Neutral
+- reasoning: concise synthesis tying scratchpad, scores, and trade decision together.
 
-Return ONLY valid JSON:
-{ "shouldTrade": boolean, "suggestedTicker": string, "tradeAmount": number|null, "impactScore": number, "sentiment": string, "reasoning": string }`;
+Return ONLY valid JSON matching this shape (illustrative numbers—compute your own for this headline):
+${tradeDecisionJsonSchemaExample(hasRelated, itemContent)}`;
 }
