@@ -1,7 +1,7 @@
 # Spiffy Trader
 
 <p align="left">
-  <a href=".github/workflows/ci.yml"><img src="https://img.shields.io/badge/CI-GitHub_Actions-2088FF?logo=githubactions&logoColor=white" alt="CI workflow" /></a>
+  <a href="https://github.com/MichaelJ43/spiffy-trader/actions/workflows/ci.yml"><img src="https://github.com/MichaelJ43/spiffy-trader/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
   <a href="#verification"><img src="https://img.shields.io/badge/verify-npm_run_verify-4B32C3?logo=vitest&logoColor=white" alt="npm run verify" /></a>
 </p>
 
@@ -40,11 +40,7 @@ Models can be wrong; the UI is for experimentation and learning, **not** financi
 | Coverage run | `npm run test:coverage` | Same as tests, plus a `% Coverage report` table; exit code 0. |
 | **All of the above (same order as CI)** | `npm run verify` | Runs `lint` → `test` → `test:coverage`; all must exit 0. |
 
-The [CI workflow](.github/workflows/ci.yml) runs the same steps as `npm run verify` on every push and pull request to `main` or `master`.
-
-After this repo is on GitHub, you can add a **live pass/fail** badge next to the links above by inserting your GitHub username or organization in this URL (replace both `OWNER` segments):
-
-`https://github.com/OWNER/spiffy-trader/actions/workflows/ci.yml/badge.svg`
+The [CI workflow](.github/workflows/ci.yml) runs the same steps as `npm run verify` on every push and pull request to `main` or `master`. The badge above reflects the latest run on the default branch; add `?branch=main` to the badge URL if you need to pin a branch.
 
 ## Run locally
 
