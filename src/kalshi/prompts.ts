@@ -36,13 +36,18 @@ Return JSON only:
 
   const candidatesPayload = curated.map((m) => ({
     t: m.ticker,
-    d: (m.title || "").slice(0, 220)
+    d: (m.title || "").slice(0, 220),
+    v24: m.volume_24h ?? 0,
+    vol: m.volume ?? 0,
+    oi: m.open_interest ?? 0
   }));
   const candidatesJson = JSON.stringify(candidatesPayload);
 
   return `You are the trading agent for a Kalshi simulation. You must decide whether to open a YES position and how large, using ONLY the evidence below.
 
 **TOP PRIORITY — DO NOT RUN OUT OF MONEY:** The bot halts if portfolio value collapses; going to ~$0 is a failure mode you must actively avoid. Treat **capital preservation** as more important than squeezing every headline for action. Prefer **shouldTrade: false** or **small tradeAmount** when edge is unclear, fees eat the trade, or available cash is low (${ctx.availableBalance.toFixed(2)}). Never behave as if you have unlimited bankroll—leave a **cash buffer** (do not deploy everything on one headline unless conviction and edge are exceptionally strong). If in doubt, **skip the trade.**
+
+**Market activity:** Each candidate includes **v24** (24h volume, contracts), **vol** (lifetime volume), and **oi** (open interest). Markets with **higher v24 and oi** tend to have more trading interest, tighter price discovery, and better odds of moving to a fair price and exiting without getting stuck in a dead tape. When headline fit is similar between tickers, **prefer more active markets** (higher v24 / oi). Candidates with all zeros are not passed to you—the list is already filtered to markets with some activity.
 
 Headline: ${JSON.stringify(itemContent)}
 

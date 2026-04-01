@@ -63,6 +63,27 @@ describe("ensureKalshiMarketsCache", () => {
     expect(kalshiOpenMarketsCache.some((m) => m.ticker === "M1")).toBe(true);
   });
 
+  it("drops markets with zero volume and zero open interest", async () => {
+    kalshiGet.mockResolvedValue({
+      markets: [
+        {
+          ticker: "DEAD",
+          title: "No trades",
+          volume_24h: 0,
+          volume: 0,
+          open_interest: 0
+        },
+        { ticker: "LIVE", title: "Has flow", volume_24h: 12, volume: 100, open_interest: 0 }
+      ],
+      cursor: undefined
+    });
+
+    await ensureKalshiMarketsCache();
+
+    expect(kalshiOpenMarketsCache.some((m) => m.ticker === "DEAD")).toBe(false);
+    expect(kalshiOpenMarketsCache.some((m) => m.ticker === "LIVE")).toBe(true);
+  });
+
   it("restores from DB when snapshot fresh", async () => {
     const t = 1_700_000_000_000;
     vi.spyOn(Date, "now").mockReturnValue(t);
