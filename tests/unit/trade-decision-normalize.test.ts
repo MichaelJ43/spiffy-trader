@@ -14,7 +14,8 @@ describe("normalizeTradeDecisionAnalysis", () => {
       scratchpad: {
         whatTheHeadlineAsserts: "Rates unchanged.",
         bestTickerRationale: "KX matches.",
-        feesAndBankrollNote: "Small size."
+        feesAndBankrollNote: "Small size.",
+        whyNotTrading: ""
       },
       relatedNarrativeVerdict: "new_fact",
       relatedNarrativeWhatChanged: "New dot plot.",
@@ -55,5 +56,15 @@ describe("normalizeTradeDecisionAnalysis", () => {
     });
     expect(out!.relevanceScore).toBe(55);
     expect(out!.edgeScore).toBe(55);
+  });
+
+  it("backfills whyNotTrading from reasoning when skipping", () => {
+    const out = normalizeTradeDecisionAnalysis({
+      shouldTrade: false,
+      sentiment: "Neutral",
+      reasoning: "Fees eat edge.",
+      suggestedTicker: ""
+    });
+    expect(out!.scratchpad.whyNotTrading).toContain("Fees eat edge");
   });
 });

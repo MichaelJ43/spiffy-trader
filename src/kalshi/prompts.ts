@@ -1,12 +1,9 @@
+import type { RelatedStoryPromptSlice } from "../news/related-stories.js";
 import { KALSHI_TAKER_FEE_COEFFICIENT } from "./fees.js";
 import type { KalshiMarketLite } from "./types.js";
 
-export type RelatedStoryBrief = {
-  overlapPercent: number;
-  ageDeltaHours: number;
-  source: string;
-  excerpt: string;
-};
+/** @deprecated Use RelatedStoryPromptSlice; kept alias for imports */
+export type RelatedStoryBrief = RelatedStoryPromptSlice;
 
 export type TradeDecisionContext = {
   /** 0–100 heuristic from RSS source historical quality (not from the headline). */
@@ -21,7 +18,7 @@ export type TradeDecisionContext = {
    * Recent stored headlines with high token overlap and close timestamps (same narrative).
    * Used to avoid double-counting stale angles; a clearly new development can still justify action.
    */
-  relatedStories?: RelatedStoryBrief[];
+  relatedStories?: RelatedStoryPromptSlice[];
 };
 
 /** Structured scratchpad inside the LLM JSON (Ollama `format: "json"` allows one object only). */
@@ -29,6 +26,11 @@ export type TradeDecisionScratchpad = {
   whatTheHeadlineAsserts: string;
   bestTickerRationale: string;
   feesAndBankrollNote: string;
+  /**
+   * When shouldTrade is false: 1–3 sentences on why not (priced in, weak edge, duplicate narrative, etc.).
+   * When shouldTrade is true: use empty string.
+   */
+  whyNotTrading: string;
 };
 
 export type RelatedNarrativeVerdict = "same_narrative" | "new_fact" | "unclear";
@@ -65,7 +67,8 @@ export function normalizeTradeDecisionAnalysis(raw: any): NormalizedTradeDecisio
   const scratchpad: TradeDecisionScratchpad = {
     whatTheHeadlineAsserts: String(sp?.whatTheHeadlineAsserts ?? "").slice(0, 2000),
     bestTickerRationale: String(sp?.bestTickerRationale ?? "").slice(0, 2000),
-    feesAndBankrollNote: String(sp?.feesAndBankrollNote ?? "").slice(0, 2000)
+    feesAndBankrollNote: String(sp?.feesAndBankrollNote ?? "").slice(0, 2000),
+    whyNotTrading: String(sp?.whyNotTrading ?? "").slice(0, 2000)
   };
 
   const verdictRaw = raw.relatedNarrativeVerdict;
@@ -111,7 +114,13 @@ export function normalizeTradeDecisionAnalysis(raw: any): NormalizedTradeDecisio
   }
 
   const sentiment = String(raw.sentiment ?? "Neutral").trim() || "Neutral";
-  const reasoning = String(raw.reasoning ?? "").slice(0, 4000);
+  let reasoning = String(raw.reasoning ?? "").slice(0, 4000);
+
+  if (!shouldTrade && !scratchpad.whyNotTrading.trim() && reasoning.trim()) {
+    scratchpad.whyNotTrading = reasoning.slice(0, 500);
+  } else if (shouldTrade) {
+    scratchpad.whyNotTrading = "";
+  }
 
   return {
     scratchpad,
@@ -141,7 +150,8 @@ function tradeDecisionJsonSchemaExample(hasRelated: boolean): string {
   "scratchpad": {
     "whatTheHeadlineAsserts": "1–3 sentences: factual claims the headline makes (not your trade opinion).",
     "bestTickerRationale": "1–3 sentences: which candidate ticker best matches those claims, or why none fit.",
-    "feesAndBankrollNote": "1–2 sentences: fee drag at plausible YES price + why size is safe vs available cash."
+    "feesAndBankrollNote": "1–2 sentences: fee drag at plausible YES price + why size is safe vs available cash.",
+    "whyNotTrading": "If shouldTrade is false: 1–3 sentences on why you are skipping. If shouldTrade is true: empty string \"\"."
   },${relatedLines}
   "relevanceScore": 0,
   "edgeScore": 0,
@@ -190,7 +200,7 @@ ${tradeDecisionJsonSchemaExample(false)}`;
   const relatedBlock = hasRelated
     ? `
 
-**Possibly related headlines already in memory** (token overlap % and hours apart — these are heuristics, not ground truth):
+**Possibly related headlines already in memory** (token overlap % and hours apart — these are heuristics, not ground truth). Each item may include **priorShouldTrade**, **priorSuggestedTicker**, and **priorDecisionSummary**: reuse that context so you do not contradict a recent pass without a **new_fact**, and do not re-buy the same stale thesis unless something material changed.
 ${JSON.stringify(ctx.relatedStories)}
 
 You **must** set \`relatedNarrativeVerdict\` and \`relatedNarrativeWhatChanged\`:
@@ -202,7 +212,7 @@ You **must** set \`relatedNarrativeVerdict\` and \`relatedNarrativeWhatChanged\`
 
   return `You are the trading agent for a Kalshi simulation. You must decide whether to open a YES position and how large, using ONLY the evidence below.
 
-Work **stepwise inside the JSON**: fill \`scratchpad\` first (factual and cautious), then narrative verdict fields (if applicable), then **relevanceScore** and **edgeScore**, then \`shouldTrade\` / \`suggestedTicker\` / \`tradeAmount\` / \`sentiment\` / \`reasoning\`. The server only accepts valid JSON — your entire reply must be one JSON object.
+Work **stepwise inside the JSON**: fill \`scratchpad\` first (factual and cautious; **whyNotTrading** when skipping), then narrative verdict fields (if applicable), then **relevanceScore** and **edgeScore**, then \`shouldTrade\` / \`suggestedTicker\` / \`tradeAmount\` / \`sentiment\` / \`reasoning\`. The server only accepts valid JSON — your entire reply must be one JSON object.
 
 **TOP PRIORITY — DO NOT RUN OUT OF MONEY:** The bot halts if portfolio value collapses; going to ~$0 is a failure mode you must actively avoid. Treat **capital preservation** as more important than squeezing every headline for action. Prefer **shouldTrade: false** or **small tradeAmount** when edge is unclear, fees eat the trade, or available cash is low (${ctx.availableBalance.toFixed(2)}). Never behave as if you have unlimited bankroll—leave a **cash buffer** (do not deploy everything on one headline unless conviction and edge are exceptionally strong). If in doubt, **skip the trade.**
 
@@ -230,6 +240,7 @@ Rules:
 - suggestedTicker: must be exactly one "t" from the list, or "".
 - **Trading fees (simulated Kalshi taker-style):** On each buy, cash drops by **tradeAmount + fee**, not just tradeAmount. Estimated taker fee ≈ **${(KALSHI_TAKER_FEE_COEFFICIENT * 100).toFixed(2)}% × tradeAmount × (1 − YES_price_at_fill)**, with YES price in 0–1 (same as Kalshi’s P×(1−P) weighting: **highest near 50¢ YES**, much lower near 0¢ or 99¢). Fees are rounded up to cents. **Low edge trades lose to fees—skip or size smaller.** Your tradeAmount limit is before fees; the server reserves headroom so notional + worst-case fee does not exceed cash.
 - tradeAmount: dollars of notional to allocate from 0 up to a safe cap below availableBalance (${ctx.availableBalance.toFixed(2)}) after fee headroom, or null if shouldTrade is false. Prefer **granular** dollar amounts (not only round tens). **Do not** pick a tradeAmount that assumes zero fees. **Bias toward smaller size** when balance is modest or uncertainty is high.
+- scratchpad.whyNotTrading: required **non-empty** string when \`shouldTrade\` is false (clear skip reason for future context). Must be **\"\"** when \`shouldTrade\` is true.
 - sentiment: Positive | Negative | Neutral
 
 Return ONE JSON object only, matching this shape (values are examples — replace with your judgment):

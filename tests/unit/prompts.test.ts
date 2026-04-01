@@ -31,7 +31,15 @@ describe("buildKalshiTradeDecisionPrompt", () => {
         tradingBootstrap: false,
         availableBalance: 200,
         relatedStories: [
-          { overlapPercent: 40, ageDeltaHours: 1, source: "X", excerpt: "Earlier headline" }
+          {
+            overlapPercent: 40,
+            ageDeltaHours: 1,
+            source: "X",
+            excerpt: "Earlier headline",
+            priorShouldTrade: false,
+            priorSuggestedTicker: null,
+            priorDecisionSummary: "Previously passed (no trade): weak edge."
+          }
         ]
       }
     );

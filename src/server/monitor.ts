@@ -10,7 +10,7 @@ import {
 } from "../lib/trade-ratings.js";
 import { checkOllamaReachable } from "../ollama/embed.js";
 import { getNewsSourcesWeighted } from "../performance/news-sources.js";
-import { findRelatedNewsStories } from "../news/related-stories.js";
+import { buildRelatedStoryPromptSlice, findRelatedNewsStories } from "../news/related-stories.js";
 import {
   applyRssFetchFailureWithBackoff,
   applyRssFetchSuccessWithBackoff,
@@ -79,7 +79,7 @@ export async function monitorAndTrade() {
     const reasoningRatingStats = recencyWeightedRatingStatsByKey(historicalTrades, (t) =>
       getReasoningKey(t.reasoning || "") || null
     );
-    const existingNews = await listDocs("news");
+    const existingNews: any[] = await listDocs("news");
     const rssSourceDocsByUrl = new Map<string, any>();
     for (const d of await listDocs("news_sources")) {
       const row = d as any;
@@ -156,12 +156,10 @@ export async function monitorAndTrade() {
       if (botStatus.portfolioHalted) break;
 
       const relatedRaw = findRelatedNewsStories(existingNews, item.content, item.timestamp);
-      const relatedForPrompt = relatedRaw.map((r) => ({
-        overlapPercent: r.overlapPercent,
-        ageDeltaHours: Number((r.deltaMs / 3_600_000).toFixed(2)),
-        source: r.source,
-        excerpt: r.content.slice(0, 220)
-      }));
+      const newsById = new Map(existingNews.map((n: any) => [n._id, n]));
+      const relatedForPrompt = relatedRaw.map((r) =>
+        buildRelatedStoryPromptSlice(r, newsById.get(r.id))
+      );
       const relatedPersist = relatedRaw.map((r) => ({
         newsId: r.id,
         overlapPercent: r.overlapPercent,
@@ -205,7 +203,7 @@ export async function monitorAndTrade() {
 
       if (decision) {
         analysisCount++;
-        await couchRequest("POST", "/news", {
+        const newsPayload = {
           ...item,
           sentiment: decision.sentiment,
           impactScore: decision.impactScore,
@@ -220,7 +218,15 @@ export async function monitorAndTrade() {
           tradeAmount: decision.tradeAmount,
           sourceConfidenceScore: sourceScore,
           ...(relatedPersist.length > 0 ? { relatedStories: relatedPersist } : {})
-        });
+        };
+        const postRes = await couchRequest("POST", "/news", newsPayload);
+        if (postRes?.id) {
+          existingNews.unshift({
+            _id: postRes.id,
+            _rev: postRes.rev,
+            ...newsPayload
+          });
+        }
 
         const reasoningKey = getReasoningKey(decision.reasoning || "");
         const reasoningScore = blendRecencyPrior(

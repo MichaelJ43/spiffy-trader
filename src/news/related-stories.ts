@@ -17,6 +17,64 @@ export type RelatedNewsMatch = {
   deltaMs: number;
 };
 
+/** One related row + prior model decision (for prompt reuse). */
+export type RelatedStoryPromptSlice = {
+  overlapPercent: number;
+  ageDeltaHours: number;
+  source: string;
+  excerpt: string;
+  /** null = no analyzed decision on the stored doc yet */
+  priorShouldTrade: boolean | null;
+  priorSuggestedTicker: string | null;
+  /** Short line summarizing last action/no-action; empty if unknown */
+  priorDecisionSummary: string;
+};
+
+/**
+ * Merge token-related match with Couch `news` doc fields so the LLM can reuse skip/trade context.
+ */
+export function buildRelatedStoryPromptSlice(
+  match: RelatedNewsMatch,
+  doc: any | undefined
+): RelatedStoryPromptSlice {
+  const excerpt = match.content.slice(0, 220);
+  const ageDeltaHours = Number((match.deltaMs / 3_600_000).toFixed(2));
+  let priorShouldTrade: boolean | null = null;
+  let priorSuggestedTicker: string | null = null;
+  let priorDecisionSummary = "";
+
+  if (doc && typeof doc.shouldTrade === "boolean") {
+    priorShouldTrade = doc.shouldTrade;
+    const tick = String(doc.suggestedTicker ?? "").trim();
+    priorSuggestedTicker = tick.length > 0 ? tick : null;
+
+    if (doc.shouldTrade === true) {
+      priorDecisionSummary =
+        `Previously chose to trade${priorSuggestedTicker ? ` (ticker ${priorSuggestedTicker})` : ""}. ${String(doc.reasoning ?? "").trim()}`.slice(
+          0,
+          320
+        );
+    } else {
+      const why = String(doc.scratchpad?.whyNotTrading ?? "").trim();
+      const reasoning = String(doc.reasoning ?? "").trim();
+      const body = why || reasoning;
+      priorDecisionSummary = (
+        body ? `Previously passed (no trade): ${body}` : "Previously passed (no trade); no detailed rationale stored."
+      ).slice(0, 320);
+    }
+  }
+
+  return {
+    overlapPercent: match.overlapPercent,
+    ageDeltaHours,
+    source: match.source,
+    excerpt,
+    priorShouldTrade,
+    priorSuggestedTicker,
+    priorDecisionSummary
+  };
+}
+
 function tokenOverlapPercent(a: string, b: string): number {
   const ta = tokenizeForMatch(a);
   const tb = tokenizeForMatch(b);
