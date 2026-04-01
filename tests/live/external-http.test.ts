@@ -11,10 +11,38 @@ vi.mock("axios", () => ({
   }
 }));
 
+/** Hostname-safe allowlist (avoids substring checks that CodeQL flags as SSRF-prone). */
+function isKalshiFixtureHost(urlStr: string): boolean {
+  try {
+    const host = new URL(urlStr).hostname.toLowerCase();
+    return host === "kalshi.com" || host.endsWith(".kalshi.com");
+  } catch {
+    return false;
+  }
+}
+
+function isRssFixtureHost(urlStr: string): boolean {
+  try {
+    return new URL(urlStr).hostname.toLowerCase() === "rss.example.com";
+  } catch {
+    return false;
+  }
+}
+
+function isOllamaFixtureUrl(urlStr: string): boolean {
+  try {
+    const u = new URL(urlStr);
+    const local = u.hostname === "localhost" || u.hostname === "127.0.0.1";
+    return local && (u.port === "11434" || u.pathname.includes("/api/generate"));
+  } catch {
+    return false;
+  }
+}
+
 describe("external HTTP boundaries", () => {
   beforeEach(() => {
     vi.mocked(axios.get).mockImplementation(async (url: string) => {
-      if (url.includes("kalshi.com") || url.includes("elections.kalshi")) {
+      if (isKalshiFixtureHost(url)) {
         return {
           data: {
             market: {
@@ -25,14 +53,14 @@ describe("external HTTP boundaries", () => {
           }
         };
       }
-      if (url.includes("rss.example.com")) {
+      if (isRssFixtureHost(url)) {
         return {
           data: `<?xml version="1.0"?><rss version="2.0"><channel>
             <item><title>External item</title><pubDate>Mon, 01 Jan 2024 00:00:00 GMT</pubDate></item>
           </channel></rss>`
         };
       }
-      if (url.includes("localhost:11434") || url.includes("/api/generate")) {
+      if (isOllamaFixtureUrl(url)) {
         return { data: { response: "{}" } };
       }
       throw new Error(`Unexpected URL in external-http test: ${url}`);

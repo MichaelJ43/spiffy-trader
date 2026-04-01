@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import rateLimit from "express-rate-limit";
 import { buildPerformanceSnapshot, getNewsSourcesWeighted } from "../performance/news-sources.js";
 import { checkOllamaReachable } from "../ollama/embed.js";
 import { getGeminiClient } from "../ai/gemini.js";
@@ -209,6 +210,13 @@ export async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
+    const staticAndSpaLimiter = rateLimit({
+      windowMs: 60 * 1000,
+      max: 600,
+      standardHeaders: true,
+      legacyHeaders: false
+    });
+    app.use(staticAndSpaLimiter);
     app.use(express.static(distPath));
     app.get("*", (_req, res) => res.sendFile(path.join(distPath, "index.html")));
   }
