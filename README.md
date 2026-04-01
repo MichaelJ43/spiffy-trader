@@ -1,17 +1,35 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
-
-# Run and deploy your AI Studio app
+# Spiffy Trader
 
 <p align="left">
   <a href=".github/workflows/ci.yml"><img src="https://img.shields.io/badge/CI-GitHub_Actions-2088FF?logo=githubactions&logoColor=white" alt="CI workflow" /></a>
   <a href="#verification"><img src="https://img.shields.io/badge/verify-npm_run_verify-4B32C3?logo=vitest&logoColor=white" alt="npm run verify" /></a>
 </p>
 
-After this repo is on GitHub, you can add a **live pass/fail** badge next to the links above by inserting your GitHub username or organization in this URL (replace both `OWNER` segments):
+**Spiffy Trader** is a local, **simulated** Kalshi trading assistant. It ingests financial and political headlines from RSS, matches them to **open** [Kalshi](https://kalshi.com) prediction markets using the public trade API, and uses an LLM to decide whether to open simulated positions—**without placing real orders** or requiring Kalshi trading credentials.
 
-`https://github.com/OWNER/spiffy-trader/actions/workflows/ci.yml/badge.svg`
+## What it does
+
+- **RSS pipeline** — Polls feeds you configure (a built-in seed list plus sources the model may discover) and stores items in a local database.
+- **Market curation** — For each headline, narrows to relevant open markets using embeddings when [Ollama](https://ollama.com) is available, or token overlap as a fallback.
+- **LLM decisions** — Ollama is the primary path; optional **Gemini** can back up generation. The model returns structured choices (trade or not, ticker, size, sentiment, reasoning), with prompts oriented around capital preservation and fees.
+- **Simulated execution** — Fills at the current YES mid from Kalshi data, applies an estimated taker-style fee, and tracks P&L and settlement in the sim. If portfolio value effectively hits zero, background work pauses until you fund the sim again and resume.
+
+## What you see in the UI
+
+- Portfolio value and cash, with open YES positions marked to mids when snapshots exist.
+- A performance chart (replay-style) over selectable windows.
+- Execution history with links to the Kalshi site for comparison.
+- **Force Analysis** (run a monitoring pass early) and **Force sell all** (close simulated positions at mid or settlement where applicable).
+
+In-app **Documentation** (same content as `src/components/DocumentationPage.tsx`) expands on fees, risk, and limitations.
+
+## Stack and data
+
+- **Kalshi** — Read-only use of the public markets API (listings and quotes). No order API; **this is not live trading.**
+- **CouchDB** — Local state (trades, news, bot status, RSS sources, cached open markets). Point `COUCHDB_URL` (and credentials) at your instance; defaults match a typical local setup.
+- **Ollama** — Generation and optional embeddings (`OLLAMA_MODEL`, `OLLAMA_EMBED_MODEL`, etc.). See `.env.example` for common variables.
+
+Models can be wrong; the UI is for experimentation and learning, **not** financial advice.
 
 ## Verification
 
@@ -24,17 +42,14 @@ After this repo is on GitHub, you can add a **live pass/fail** badge next to the
 
 The [CI workflow](.github/workflows/ci.yml) runs the same steps as `npm run verify` on every push and pull request to `main` or `master`.
 
-This contains everything you need to run your app locally.
+After this repo is on GitHub, you can add a **live pass/fail** badge next to the links above by inserting your GitHub username or organization in this URL (replace both `OWNER` segments):
 
-View your app in AI Studio: https://ai.studio/apps/c83cd991-0c69-4a02-9c64-deaf775ea479
+`https://github.com/OWNER/spiffy-trader/actions/workflows/ci.yml/badge.svg`
 
-## Run Locally
+## Run locally
 
-**Prerequisites:**  Node.js
+**Prerequisites:** Node.js, a running **CouchDB** instance, and **Ollama** (with your chosen chat and, if you want semantic matching, embedding models pulled). Optional: `GEMINI_API_KEY` for Gemini as a backup to Ollama.
 
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1. Install dependencies: `npm install`
+2. Copy `.env.example` to `.env.local` and set at least CouchDB URL/credentials, Ollama settings, and optionally `GEMINI_API_KEY`.
+3. Run the app: `npm run dev` (serves on port 3000 by default).
