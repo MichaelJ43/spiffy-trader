@@ -55,8 +55,23 @@ export default function DocumentationPage({ onBack }: Props) {
             </li>
             <li>
               <span className="text-white/90">Asks the LLM</span> (Ollama first, optional Gemini backup)
+<<<<<<< Updated upstream
               for a structured decision: trade or not, ticker, size, sentiment, and reasoning. The prompt
               stresses capital preservation, fees, and not running the simulated account to zero.
+=======
+              for one JSON object per headline: a <span className="text-white/90">scratchpad</span>{" "}
+              (what the headline asserts, ticker fit, fee/cash notes, plus{" "}
+              <span className="text-white/90">why not trading</span> when skipping), separate{" "}
+              <span className="text-white/90">relevance</span> and <span className="text-white/90">edge</span>{" "}
+              scores (0–100), and—when similar headlines already exist—whether the thread is the{" "}
+              <span className="text-white/90">same narrative</span> vs a <span className="text-white/90">new fact</span>
+              . Those related rows can include the <span className="text-white/90">last simulated decision</span>{" "}
+              (pass or trade and a short summary) so the model does not ignore a recent pass without new information.
+              The dashboard <span className="text-white/90">Impact</span> figure is a{" "}
+              <span className="text-white/90">70% relevance / 30% edge</span> blend so it tracks headline
+              importance more like the old single score—edge is often low on its own when there is no clear
+              tradable mispricing.
+>>>>>>> Stashed changes
             </li>
             <li>
               <span className="text-white/90">Simulates execution</span> at the current YES mid from
@@ -82,6 +97,14 @@ export default function DocumentationPage({ onBack }: Props) {
               website (event page when known) so you can compare the sim with the real market.
             </li>
             <li>
+<<<<<<< Updated upstream
+=======
+              <span className="text-white/90">News feed</span> — each card shows sentiment,{" "}
+              <span className="text-white/90">Impact</span> (70% relevance / 30% edge blend), and when
+              stored, <span className="text-white/90">Rel · Edge</span> percentages separately.
+            </li>
+            <li>
+>>>>>>> Stashed changes
               <span className="text-white/90">Force Analysis</span> — triggers a monitoring pass early;{" "}
               <span className="text-white/90">Force sell all</span> closes open simulated positions at the
               current mid or settlement when applicable.
