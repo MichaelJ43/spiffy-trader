@@ -1,6 +1,10 @@
 export const PORT = 3000;
 
-export const SEED_NEWS_SOURCE_URLS = [
+/**
+ * Business, markets, and political / policy headlines.
+ * Same monitor → LLM → Kalshi curation path as sports and entertainment seeds.
+ */
+export const SEED_NEWS_SOURCE_URLS_GENERAL = [
   "https://feeds.reuters.com/reuters/businessNews",
   "https://feeds.reuters.com/reuters/topNews",
   "https://www.cnbc.com/id/100003114/device/rss/rss.html",
@@ -18,11 +22,69 @@ export const SEED_NEWS_SOURCE_URLS = [
   "http://feeds.bbci.co.uk/news/business/rss.xml"
 ] as const;
 
+/** Sports — merged into {@link SEED_NEWS_SOURCE_URLS} (no separate trading logic). */
+export const SEED_NEWS_SOURCE_URLS_SPORTS = [
+  "https://feeds.reuters.com/reuters/sportsNews",
+  "http://feeds.bbci.co.uk/sport/rss.xml",
+  "https://www.espn.com/espn/rss/news",
+  "https://www.cbssports.com/rss/headlines/",
+  "https://www.theguardian.com/sport/rss"
+] as const;
+
+/** Entertainment / arts / culture — merged into {@link SEED_NEWS_SOURCE_URLS}. */
+export const SEED_NEWS_SOURCE_URLS_ENTERTAINMENT = [
+  "https://feeds.reuters.com/reuters/artsNews",
+  "https://variety.com/feed/",
+  "https://deadline.com/feed/",
+  "https://www.hollywoodreporter.com/feed/",
+  "https://www.theguardian.com/film/rss"
+] as const;
+
+/**
+ * Tabloid / gossip / high-churn celebrity sources — same pipeline as other seeds, but a **lower**
+ * default recency prior (faster, less verified; still moves public attention).
+ */
+export const SEED_NEWS_SOURCE_URLS_TABLOID = [
+  "https://www.tmz.com/rss.xml",
+  "https://nypost.com/feed/",
+  "https://pagesix.com/feed/",
+  "https://radaronline.com/feed/",
+  "https://www.usmagazine.com/feed/",
+  "https://www.eonline.com/news/rss",
+  "https://www.etonline.com/news/rss",
+  "https://hollywoodlife.com/feed/",
+  "https://www.dailymail.co.uk/tvshowbiz/index.rss",
+  "https://www.thesun.co.uk/showbiz/feed/",
+  "https://www.nationalenquirer.com/feed/"
+] as const;
+
+export const SEED_NEWS_SOURCE_URLS_TABLOID_SET = new Set<string>(SEED_NEWS_SOURCE_URLS_TABLOID);
+
+/** Default RSS seeds: general + sports + entertainment + tabloid (single monitor loop and seed routine). */
+export const SEED_NEWS_SOURCE_URLS = [
+  ...SEED_NEWS_SOURCE_URLS_GENERAL,
+  ...SEED_NEWS_SOURCE_URLS_SPORTS,
+  ...SEED_NEWS_SOURCE_URLS_ENTERTAINMENT,
+  ...SEED_NEWS_SOURCE_URLS_TABLOID
+] as const;
+
 export const SEED_NEWS_SOURCE_URL_SET = new Set<string>(SEED_NEWS_SOURCE_URLS);
 
 /** Default recency when no CLOSED trade ratings yet: seed list = trusted; discovered = neutral. */
 export const SEED_SOURCE_DEFAULT_RECENCY_SCORE = 80;
+/** Tabloid / gossip seeds — lower prior so feed weight and confidence inputs stay skeptical until trade history proves otherwise. */
+export const TABLOID_SEED_DEFAULT_RECENCY_SCORE = 30;
 export const NON_SEED_SOURCE_DEFAULT_RECENCY_SCORE = 50;
+
+/**
+ * Prior recency score blended with per-source trade ratings in {@link getNewsSourcesWeighted}.
+ * Tabloid seeds are checked first (they are also members of {@link SEED_NEWS_SOURCE_URL_SET}).
+ */
+export function defaultRecencyPriorForNewsSourceUrl(url: string): number {
+  if (SEED_NEWS_SOURCE_URLS_TABLOID_SET.has(url)) return TABLOID_SEED_DEFAULT_RECENCY_SCORE;
+  if (SEED_NEWS_SOURCE_URL_SET.has(url)) return SEED_SOURCE_DEFAULT_RECENCY_SCORE;
+  return NON_SEED_SOURCE_DEFAULT_RECENCY_SCORE;
+}
 
 export const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
 export const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llama3.1:8b";
