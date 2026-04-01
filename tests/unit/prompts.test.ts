@@ -1,5 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { buildKalshiTradeDecisionPrompt } from "../../src/kalshi/prompts.js";
+import {
+  buildKalshiTradeDecisionPrompt,
+  buildSimulationIdleContext
+} from "../../src/kalshi/prompts.js";
+
+const idleDefaults = {
+  hoursSinceLastTrade: 3,
+  openPositionCount: 0,
+  ratedClosedTradeCount: 0,
+  recentTradeLearningSummary: ""
+} as const;
+
+describe("buildSimulationIdleContext", () => {
+  it("reports null hours when no trades", () => {
+    const x = buildSimulationIdleContext([]);
+    expect(x.hoursSinceLastTrade).toBeNull();
+    expect(x.openPositionCount).toBe(0);
+    expect(x.recentTradeLearningSummary).toBe("");
+  });
+
+  it("computes hours from newest trade timestamp", () => {
+    const past = new Date(Date.now() - 48 * 3_600_000).toISOString();
+    const x = buildSimulationIdleContext([{ status: "OPEN", timestamp: past, ticker: "KX1" }]);
+    expect(x.hoursSinceLastTrade).not.toBeNull();
+    expect(x.hoursSinceLastTrade!).toBeGreaterThan(40);
+    expect(x.openPositionCount).toBe(1);
+  });
+});
 
 describe("buildKalshiTradeDecisionPrompt", () => {
   it("includes TOP PRIORITY capital preservation when markets exist", () => {
@@ -10,7 +37,8 @@ describe("buildKalshiTradeDecisionPrompt", () => {
         confidenceScore: 70,
         feedWeight: 1,
         tradingBootstrap: false,
-        availableBalance: 200
+        availableBalance: 200,
+        ...idleDefaults
       }
     );
     expect(p).toContain("TOP PRIORITY");
@@ -19,6 +47,8 @@ describe("buildKalshiTradeDecisionPrompt", () => {
     expect(p).toContain("scratchpad");
     expect(p).toContain("relevanceScore");
     expect(p).toContain("edgeScore");
+    expect(p).toContain("BALANCE");
+    expect(p).toContain("hoursSinceLastTrade");
   });
 
   it("requires related narrative fields when relatedStories are passed", () => {
@@ -30,6 +60,7 @@ describe("buildKalshiTradeDecisionPrompt", () => {
         feedWeight: 1,
         tradingBootstrap: false,
         availableBalance: 200,
+        ...idleDefaults,
         relatedStories: [
           {
             overlapPercent: 40,
@@ -55,7 +86,8 @@ describe("buildKalshiTradeDecisionPrompt", () => {
         confidenceScore: 50,
         feedWeight: 1,
         tradingBootstrap: true,
-        availableBalance: 100
+        availableBalance: 100,
+        ...idleDefaults
       }
     );
     expect(p).toContain("shouldTrade");

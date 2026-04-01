@@ -1,6 +1,12 @@
 export const PORT = 3000;
 
 /**
+ * Simulation-only: first idle-narrative tier boundary (minutes). Second tier = 2×, third = 6×
+ * (same relative spacing as 24h / 72h). Raise this when wiring to real trading cadence.
+ */
+export const IDLE_NARRATIVE_FIRST_TIER_MINUTES = 30;
+
+/**
  * Business, markets, and political / policy headlines.
  * Same monitor → LLM → Kalshi curation path as sports and entertainment seeds.
  */

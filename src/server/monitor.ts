@@ -22,6 +22,7 @@ import { ensureKalshiMarketsCache } from "../kalshi/cache.js";
 import { kalshiOpenMarketsCache } from "../kalshi/market-state.js";
 import {
   buildKalshiTradeDecisionPrompt,
+  buildSimulationIdleContext,
   normalizeTradeDecisionAnalysis
 } from "../kalshi/prompts.js";
 import {
@@ -149,6 +150,8 @@ export async function monitorAndTrade() {
     const tradingBootstrap =
       TRADE_BOOTSTRAP_UNTIL_RATED > 0 && ratedClosedCount < TRADE_BOOTSTRAP_UNTIL_RATED;
 
+    const idleCtx = buildSimulationIdleContext(historicalTrades);
+
     let analysisCount = 0;
     let failureCount = 0;
 
@@ -181,6 +184,7 @@ export async function monitorAndTrade() {
         feedWeight,
         tradingBootstrap,
         availableBalance: Math.max(0, botStatus.cashBalance),
+        ...idleCtx,
         relatedStories: relatedForPrompt.length > 0 ? relatedForPrompt : undefined
       });
 
