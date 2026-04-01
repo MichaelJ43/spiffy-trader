@@ -6,6 +6,7 @@ import {
 } from "../server/state.js";
 import { couchRequest, ensureDb, upsertStatus } from "./couch.js";
 import { listDocs, repairNewsSourcesDbIfBroken, seedNewsSourcesIfNeeded } from "./documents.js";
+import { ensureMarketWatchlistDb } from "./market-watchlist.js";
 
 function statusFromCouchDoc(current: any): BotStatus {
   return {
@@ -21,6 +22,7 @@ export async function initializeDatabase() {
   await ensureDb("trades");
   await ensureDb("news");
   await ensureDb("kalshi_markets");
+  await ensureMarketWatchlistDb();
   await ensureDb("status");
   await repairNewsSourcesDbIfBroken();
   await seedNewsSourcesIfNeeded();

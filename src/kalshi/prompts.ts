@@ -1,6 +1,13 @@
 import { KALSHI_TAKER_FEE_COEFFICIENT } from "./fees.js";
 import type { KalshiMarketLite } from "./types.js";
 
+export type RelatedStoryBrief = {
+  overlapPercent: number;
+  ageDeltaHours: number;
+  source: string;
+  excerpt: string;
+};
+
 export type TradeDecisionContext = {
   /** 0–100 heuristic from RSS source historical quality (not from the headline). */
   confidenceScore: number;
@@ -10,6 +17,11 @@ export type TradeDecisionContext = {
   tradingBootstrap: boolean;
   /** Current simulated balance — max dollars allocatable on a new trade. */
   availableBalance: number;
+  /**
+   * Recent stored headlines with high token overlap and close timestamps (same narrative).
+   * Used to avoid double-counting stale angles; a clearly new development can still justify action.
+   */
+  relatedStories?: RelatedStoryBrief[];
 };
 
 /**
@@ -48,6 +60,14 @@ Return JSON only:
 **TOP PRIORITY — DO NOT RUN OUT OF MONEY:** The bot halts if portfolio value collapses; going to ~$0 is a failure mode you must actively avoid. Treat **capital preservation** as more important than squeezing every headline for action. Prefer **shouldTrade: false** or **small tradeAmount** when edge is unclear, fees eat the trade, or available cash is low (${ctx.availableBalance.toFixed(2)}). Never behave as if you have unlimited bankroll—leave a **cash buffer** (do not deploy everything on one headline unless conviction and edge are exceptionally strong). If in doubt, **skip the trade.**
 
 **Market activity:** Each candidate includes **v24** (24h volume, contracts), **vol** (lifetime volume), and **oi** (open interest). Markets with **higher v24 and oi** tend to have more trading interest, tighter price discovery, and better odds of moving to a fair price and exiting without getting stuck in a dead tape. When headline fit is similar between tickers, **prefer more active markets** (higher v24 / oi). Candidates with all zeros are not passed to you—the list is already filtered to markets with some activity.
+${
+  ctx.relatedStories && ctx.relatedStories.length > 0
+    ? `
+**Possibly related headlines already in memory** (token overlap % and hours apart — same story thread vs separate event is your judgment; do not treat as new shocking information if it is only a rehash):
+${JSON.stringify(ctx.relatedStories)}
+`
+    : ""
+}
 
 Headline: ${JSON.stringify(itemContent)}
 

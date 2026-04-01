@@ -9,10 +9,13 @@ import {
   recencyWeightedRatingStatsByKey
 } from "../lib/trade-ratings.js";
 import { checkOllamaReachable } from "../ollama/embed.js";
+import { getNewsSourcesWeighted } from "../performance/news-sources.js";
+import { findRelatedNewsStories } from "../news/related-stories.js";
 import {
-  applyRssFetchStats,
-  getNewsSourcesWeighted
-} from "../performance/news-sources.js";
+  applyRssFetchFailureWithBackoff,
+  applyRssFetchSuccessWithBackoff,
+  planRssFetchAttempt
+} from "../rss/backoff.js";
 import { fetchRssFeed } from "../rss/fetch.js";
 import { curateMarketsForNews } from "../kalshi/curate.js";
 import { ensureKalshiMarketsCache } from "../kalshi/cache.js";
@@ -87,6 +90,27 @@ export async function monitorAndTrade() {
     const feedResults = await Promise.all(
       sortedSources.map(async (source) => {
         const couchDoc = rssSourceDocsByUrl.get(source.url);
+        const nowMs = Date.now();
+        if (!couchDoc?._id) {
+          try {
+            const feed = await fetchRssFeed(source.url);
+            return feed.items.slice(0, 2).map((item) => ({
+              source: feed.title || "RSS Feed",
+              sourceUrl: source.url,
+              content: `${item.title}: ${item.contentSnippet || item.content}`,
+              timestamp: item.pubDate || new Date().toISOString(),
+              link: item.link
+            }));
+          } catch {
+            return [];
+          }
+        }
+        const { doc: readyDoc, shouldFetch } = planRssFetchAttempt(couchDoc, nowMs);
+        if (!shouldFetch) {
+          await couchRequest("PUT", `/news_sources/${readyDoc._id}`, readyDoc);
+          rssSourceDocsByUrl.set(source.url, readyDoc);
+          return [];
+        }
         try {
           const feed = await fetchRssFeed(source.url);
           const latestItems = feed.items.slice(0, 2).map((item) => ({
@@ -96,18 +120,14 @@ export async function monitorAndTrade() {
             timestamp: item.pubDate || new Date().toISOString(),
             link: item.link
           }));
-          if (couchDoc?._id) {
-            const updated = applyRssFetchStats(couchDoc, true);
-            await couchRequest("PUT", `/news_sources/${updated._id}`, updated);
-            rssSourceDocsByUrl.set(source.url, updated);
-          }
+          const updated = applyRssFetchSuccessWithBackoff(readyDoc);
+          await couchRequest("PUT", `/news_sources/${updated._id}`, updated);
+          rssSourceDocsByUrl.set(source.url, updated);
           return latestItems;
         } catch {
-          if (couchDoc?._id) {
-            const updated = applyRssFetchStats(couchDoc, false);
-            await couchRequest("PUT", `/news_sources/${updated._id}`, updated);
-            rssSourceDocsByUrl.set(source.url, updated);
-          }
+          const updated = applyRssFetchFailureWithBackoff(readyDoc, nowMs);
+          await couchRequest("PUT", `/news_sources/${updated._id}`, updated);
+          rssSourceDocsByUrl.set(source.url, updated);
           return [];
         }
       })
@@ -132,6 +152,19 @@ export async function monitorAndTrade() {
     for (const item of newItems) {
       if (botStatus.portfolioHalted) break;
 
+      const relatedRaw = findRelatedNewsStories(existingNews, item.content, item.timestamp);
+      const relatedForPrompt = relatedRaw.map((r) => ({
+        overlapPercent: r.overlapPercent,
+        ageDeltaHours: Number((r.deltaMs / 3_600_000).toFixed(2)),
+        source: r.source,
+        excerpt: r.content.slice(0, 220)
+      }));
+      const relatedPersist = relatedRaw.map((r) => ({
+        newsId: r.id,
+        overlapPercent: r.overlapPercent,
+        deltaMs: r.deltaMs
+      }));
+
       const curatedMarkets = await curateMarketsForNews(
         item.content,
         kalshiOpenMarketsCache,
@@ -146,7 +179,8 @@ export async function monitorAndTrade() {
         confidenceScore: sourceScore,
         feedWeight,
         tradingBootstrap,
-        availableBalance: Math.max(0, botStatus.cashBalance)
+        availableBalance: Math.max(0, botStatus.cashBalance),
+        relatedStories: relatedForPrompt.length > 0 ? relatedForPrompt : undefined
       });
 
       console.log(
@@ -175,7 +209,8 @@ export async function monitorAndTrade() {
           suggestedTicker: analysis.suggestedTicker,
           shouldTrade: analysis.shouldTrade,
           tradeAmount: analysis.tradeAmount,
-          sourceConfidenceScore: sourceScore
+          sourceConfidenceScore: sourceScore,
+          ...(relatedPersist.length > 0 ? { relatedStories: relatedPersist } : {})
         });
 
         const reasoningKey = getReasoningKey(analysis.reasoning || "");
@@ -289,7 +324,8 @@ export async function monitorAndTrade() {
           ...item,
           sentiment: "Unknown",
           impactScore: 0,
-          reasoning: "AI Analysis unavailable (Check API Key or Ollama connection)."
+          reasoning: "AI Analysis unavailable (Check API Key or Ollama connection).",
+          ...(relatedPersist.length > 0 ? { relatedStories: relatedPersist } : {})
         });
       }
     }

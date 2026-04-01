@@ -8,3 +8,4 @@ coverage/
 !.env.example
 local-db/
 todo.txt
+*.pem

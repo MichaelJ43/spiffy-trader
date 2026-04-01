@@ -54,6 +54,7 @@ describe("initializeDatabase", () => {
     await initializeDatabase();
 
     expect(ensureDb).toHaveBeenCalledWith("trades");
+    expect(ensureDb).toHaveBeenCalledWith("market_watchlist");
     expect(upsertStatus).toHaveBeenCalled();
     expect(couchRequest).toHaveBeenCalledWith("POST", "/news", expect.any(Object));
   });
