@@ -1,0 +1,93 @@
+{
+  "entities": {
+    "Trade": {
+      "title": "Trade",
+      "description": "A record of a trade executed on a prediction market.",
+      "type": "object",
+      "properties": {
+        "market": { "type": "string", "description": "The market platform (e.g., Polymarket, Kalshi)." },
+        "event": { "type": "string", "description": "The event being traded on." },
+        "outcome": { "type": "string", "description": "The outcome bet on." },
+        "amount": { "type": "number", "description": "The amount of money traded." },
+        "entryFeeUsd": { "type": "number", "description": "Estimated Kalshi-style taker fee in USD on entry (sim)." },
+        "totalOutlayUsd": { "type": "number", "description": "Cash spent on entry: amount + entryFeeUsd (sim)." },
+        "price": { "type": "number", "description": "The price per share." },
+        "status": { "type": "string", "enum": ["OPEN", "CLOSED", "PENDING"], "description": "The current status of the trade." },
+        "pnl": { "type": "number", "description": "Profit and loss for this trade." },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When the trade was executed." },
+        "reasoning": { "type": "string", "description": "The LLM's reasoning for this trade." },
+        "triggeringNewsItems": {
+          "type": "array",
+          "description": "News items that directly triggered this trade.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "source": { "type": "string" },
+              "sourceUrl": { "type": "string" },
+              "content": { "type": "string" },
+              "timestamp": { "type": "string", "format": "date-time" },
+              "link": { "type": "string" },
+              "impactScore": { "type": "number" },
+              "sentiment": { "type": "string" }
+            }
+          }
+        },
+        "confidenceScore": { "type": "number", "description": "0-100 confidence at trade entry after source/reasoning adjustments." },
+        "tradeRating": { "type": "number", "description": "0-100 post-trade quality rating used for future prioritization." },
+        "sourcePerformanceScore": { "type": "number", "description": "0-100 source score at trade entry based on historical ratings." },
+        "reasoningPerformanceScore": { "type": "number", "description": "0-100 reasoning-cluster score at trade entry based on historical ratings." }
+      },
+      "required": ["market", "event", "outcome", "amount", "price", "status", "timestamp", "triggeringNewsItems", "confidenceScore"]
+    },
+    "NewsItem": {
+      "title": "NewsItem",
+      "description": "A news update monitored by the bot.",
+      "type": "object",
+      "properties": {
+        "source": { "type": "string", "description": "The source of the news." },
+        "content": { "type": "string", "description": "The content of the news update." },
+        "sentiment": { "type": "string", "description": "LLM-analyzed sentiment." },
+        "impactScore": { "type": "number", "description": "0-100 score of potential market impact." },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When the news was received." }
+      },
+      "required": ["source", "content", "timestamp"]
+    },
+    "BotStatus": {
+      "title": "BotStatus",
+      "description": "The current state and health of the trading bot.",
+      "type": "object",
+      "properties": {
+        "cashBalance": { "type": "number", "description": "Unencumbered cash (not allocated to open positions). Legacy docs may use currentBalance." },
+        "totalPnL": { "type": "number", "description": "Cumulative realized PnL from closed trades." },
+        "survivalStatus": { "type": "string", "description": "Health status (e.g., 'Healthy', 'Critical')." },
+        "lastUpdate": { "type": "string", "format": "date-time", "description": "Last time the status was updated." },
+        "portfolioHalted": { "type": "boolean", "description": "When true, monitor and position AI are stopped until POST /api/trading/resume." }
+      },
+      "required": ["cashBalance", "survivalStatus", "lastUpdate"]
+    },
+    "NewsSource": {
+      "title": "NewsSource",
+      "description": "Persisted RSS feed. Trade-based score is computed at runtime; rss* fields track bot fetch outcomes for deprioritizing strict feeds.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["rss"] },
+        "url": { "type": "string", "description": "RSS feed URL." },
+        "origin": { "type": "string", "enum": ["seed", "llm"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "rssFetchAttempts": { "type": "integer", "description": "Times the bot attempted to fetch this RSS URL." },
+        "rssFetchFailures": { "type": "integer", "description": "Failed fetches (network/parse/blocks)." },
+        "rejectionRate": { "type": "number", "description": "Percent: 100 * failures / attempts (0 if no attempts)." }
+      },
+      "required": ["type", "url", "origin", "createdAt"]
+    }
+  },
+  "couchdb": {
+    "trades": { "schema": "Trade", "description": "Documents for executed and open trades." },
+    "news": { "schema": "NewsItem", "description": "Documents for monitored news items." },
+    "status": { "schema": "BotStatus", "description": "Database containing the singleton current bot status document." },
+    "news_sources": { "schema": "NewsSource", "description": "RSS sources to poll." },
+    "kalshi_markets": {
+      "description": "Chunked open-markets snapshot: docs meta, c0…cN (items[]), optional legacy open_markets_snapshot."
+    }
+  }
+}

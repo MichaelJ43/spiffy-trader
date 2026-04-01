@@ -1,0 +1,5 @@
+{
+  "name": "Spiffy Trader",
+  "description": "Spiffy Trader — autonomous market prediction and trading bot utilizing local LLMs for news analysis and strategic execution on prediction markets.",
+  "requestFramePermissions": []
+}

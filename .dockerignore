@@ -1,0 +1,9 @@
+node_modules
+dist
+local-db
+.git
+.cursor
+*.log
+.env
+.env.*
+!.env.example

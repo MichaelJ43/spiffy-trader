@@ -1,0 +1,14 @@
+{
+  "dbProvider": "couchdb",
+  "couchdbUrl": "http://localhost:5984",
+  "databases": {
+    "trades": "trades",
+    "news": "news",
+    "status": "status",
+    "news_sources": "news_sources"
+  },
+  "auth": {
+    "usernameEnv": "COUCHDB_USER",
+    "passwordEnv": "COUCHDB_PASSWORD"
+  }
+}

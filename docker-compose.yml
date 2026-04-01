@@ -1,0 +1,86 @@
+# Default OLLAMA_MODEL targets the lead “newest” general model on Ollama’s library (see
+# https://ollama.com/library?sort=newest ). Nemotron Cascade 2 is a 30B MoE (~3B active),
+# a good match for RTX 4090 + ample system RAM. Override with OLLAMA_MODEL if you prefer
+# another tag (e.g. qwen3.5:27b).
+
+services:
+  spiffy-trader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-nemotron-cascade-2}
+      - OLLAMA_EMBED_MODEL=${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+      - OLLAMA_GENERATE_TIMEOUT_MS=${OLLAMA_GENERATE_TIMEOUT_MS:-300000}
+      - SOURCE_RATING_HALF_LIFE_DAYS=${SOURCE_RATING_HALF_LIFE_DAYS:-14}
+      - COUCHDB_URL=http://couchdb:5984
+      - COUCHDB_USER=${COUCHDB_USER:-admin}
+      - COUCHDB_PASSWORD=${COUCHDB_PASSWORD:-password}
+    depends_on:
+      couchdb:
+        condition: service_started
+      couchdb-init:
+        condition: service_completed_successfully
+      ollama:
+        condition: service_healthy
+      ollama-pull:
+        condition: service_completed_successfully
+
+  couchdb-init:
+    image: curlimages/curl:8.5.0
+    depends_on:
+      couchdb:
+        condition: service_started
+    environment:
+      COUCH_INIT_USER: ${COUCHDB_USER:-admin}
+      COUCH_INIT_PASS: ${COUCHDB_PASSWORD:-password}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      [
+        "until curl -sf http://couchdb:5984/ >/dev/null; do sleep 1; done; for db in _users _replicator _global_changes; do code=$$(curl -s -o /dev/null -w '%{http_code}' -u \"$$COUCH_INIT_USER:$$COUCH_INIT_PASS\" -X PUT http://couchdb:5984/$$db); case $$code in 201|200|412) ;; *) echo \"init failed for $$db: $$code\"; exit 1;; esac; done"
+      ]
+    restart: "no"
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    gpus: all
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      PULL_MODEL: ${OLLAMA_MODEL:-nemotron-cascade-2}
+      PULL_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+    entrypoint: ["/bin/sh", "-c", "ollama pull $$PULL_MODEL && ollama pull $$PULL_EMBED_MODEL"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
+  couchdb:
+    image: couchdb:3
+    environment:
+      - COUCHDB_USER=${COUCHDB_USER:-admin}
+      - COUCHDB_PASSWORD=${COUCHDB_PASSWORD:-password}
+    ports:
+      - "5984:5984"
+    volumes:
+      - ./local-db:/opt/couchdb/data
+
+volumes:
+  ollama_data:
