@@ -102,6 +102,12 @@ export function normalizeTradeDecisionAnalysis(raw: any): NormalizedTradeDecisio
     edgeScore = relevanceScore;
   }
 
+  // Models often echo template 0/0; if they still emit legacy impactScore, trust it.
+  if (relevanceScore === 0 && edgeScore === 0 && legacyImpact > 0) {
+    relevanceScore = legacyImpact;
+    edgeScore = legacyImpact;
+  }
+
   const impactScore = Math.round((relevanceScore + edgeScore) / 2);
 
   const shouldTrade = raw.shouldTrade === true;
@@ -137,7 +143,23 @@ export function normalizeTradeDecisionAnalysis(raw: any): NormalizedTradeDecisio
   };
 }
 
-function tradeDecisionJsonSchemaExample(hasRelated: boolean): string {
+/** Stable per-headline illustrative scores so the template isn't always the same pair (reduces blind copying). */
+function exampleScoresFromHeadline(seed: string): { rel: number; edge: number } {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const rel = 32 + (Math.abs(h) % 49); // 32–80
+  const edge = 22 + (Math.abs(h >> 16) % 54); // 22–75
+  return { rel, edge };
+}
+
+function tradeDecisionJsonSchemaExample(
+  hasRelated: boolean,
+  headlineSeed: string,
+  opts?: { zeroScores?: boolean }
+): string {
   const relatedLines = hasRelated
     ? `
   "relatedNarrativeVerdict": "unclear",
@@ -146,6 +168,9 @@ function tradeDecisionJsonSchemaExample(hasRelated: boolean): string {
   "relatedNarrativeVerdict": null,
   "relatedNarrativeWhatChanged": null,`;
 
+  const { rel: exRel, edge: exEdge } = opts?.zeroScores
+    ? { rel: 0, edge: 0 }
+    : exampleScoresFromHeadline(headlineSeed);
   return `{
   "scratchpad": {
     "whatTheHeadlineAsserts": "1–3 sentences: factual claims the headline makes (not your trade opinion).",
@@ -153,8 +178,8 @@ function tradeDecisionJsonSchemaExample(hasRelated: boolean): string {
     "feesAndBankrollNote": "1–2 sentences: fee drag at plausible YES price + why size is safe vs available cash.",
     "whyNotTrading": "If shouldTrade is false: 1–3 sentences on why you are skipping. If shouldTrade is true: empty string \"\"."
   },${relatedLines}
-  "relevanceScore": 0,
-  "edgeScore": 0,
+  "relevanceScore": ${exRel},
+  "edgeScore": ${exEdge},
   "shouldTrade": false,
   "suggestedTicker": "",
   "tradeAmount": null,
@@ -185,7 +210,7 @@ Context: confidenceScore=${ctx.confidenceScore} (RSS source track record only), 
 
 Return ONE JSON object only (no markdown). Fill every key exactly like the shape below. Use null only where shown.
 
-${tradeDecisionJsonSchemaExample(false)}`;
+${tradeDecisionJsonSchemaExample(false, itemContent, { zeroScores: true })}`;
   }
 
   const candidatesPayload = curated.map((m) => ({
@@ -233,6 +258,7 @@ Signals passed to you (do not ignore them, but you make the final decision):
 Scores (0–100 integers):
 - **relevanceScore**: how well the headline maps to the **chosen** market contract (wrong ticker → low even if the headline is loud).
 - **edgeScore**: conditional on relevance, how much **actionable** mispricing vs likely market consensus / Kalshi YES (not just “news is big”). Use **low edge** if the information is probably priced in or redundant (**same_narrative**).
+- **Do not** copy numbers from the JSON template below. **relevanceScore** and **edgeScore** must reflect **this** headline and your chosen ticker. Use **both 0** only if no candidate market fits at all; otherwise typical news has mixed scores (often roughly **15–85**, rarely both exactly 0).
 
 Rules:
 - shouldTrade: true only if you want a new simulated position **and** the trade still makes sense after fees and bankroll risk (see TOP PRIORITY above). High **relevanceScore** alone is not enough — need **edgeScore** that clears fees and uncertainty.
@@ -243,7 +269,7 @@ Rules:
 - scratchpad.whyNotTrading: required **non-empty** string when \`shouldTrade\` is false (clear skip reason for future context). Must be **\"\"** when \`shouldTrade\` is true.
 - sentiment: Positive | Negative | Neutral
 
-Return ONE JSON object only, matching this shape (values are examples — replace with your judgment):
+Return ONE JSON object only, matching this shape. **Replace every example string and number** (including **relevanceScore** and **edgeScore**) with values derived from the headline above—not literal copies of the template.
 
-${tradeDecisionJsonSchemaExample(hasRelated)}`;
+${tradeDecisionJsonSchemaExample(hasRelated, itemContent)}`;
 }

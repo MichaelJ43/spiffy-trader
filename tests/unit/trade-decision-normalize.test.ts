@@ -67,4 +67,18 @@ describe("normalizeTradeDecisionAnalysis", () => {
     });
     expect(out!.scratchpad.whyNotTrading).toContain("Fees eat edge");
   });
+
+  it("uses legacy impactScore when model echoes 0/0 for rel and edge", () => {
+    const out = normalizeTradeDecisionAnalysis({
+      relevanceScore: 0,
+      edgeScore: 0,
+      impactScore: 55,
+      shouldTrade: false,
+      sentiment: "Neutral",
+      reasoning: "Skip."
+    });
+    expect(out!.relevanceScore).toBe(55);
+    expect(out!.edgeScore).toBe(55);
+    expect(out!.impactScore).toBe(55);
+  });
 });
