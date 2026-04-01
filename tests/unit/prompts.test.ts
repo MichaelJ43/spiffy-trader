@@ -16,6 +16,35 @@ describe("buildKalshiTradeDecisionPrompt", () => {
     expect(p).toContain("TOP PRIORITY");
     expect(p).toContain("DO NOT RUN OUT OF MONEY");
     expect(p).toContain("KXTEST-1");
+    expect(p).toContain("scratchpad");
+    expect(p).toContain("relevanceScore");
+    expect(p).toContain("edgeScore");
+  });
+
+  it("requires related narrative fields when relatedStories are passed", () => {
+    const p = buildKalshiTradeDecisionPrompt(
+      "Fed holds",
+      [{ ticker: "KX1", title: "M", event_ticker: "E" }],
+      {
+        confidenceScore: 70,
+        feedWeight: 1,
+        tradingBootstrap: false,
+        availableBalance: 200,
+        relatedStories: [
+          {
+            overlapPercent: 40,
+            ageDeltaHours: 1,
+            source: "X",
+            excerpt: "Earlier headline",
+            priorShouldTrade: false,
+            priorSuggestedTicker: null,
+            priorDecisionSummary: "Previously passed (no trade): weak edge."
+          }
+        ]
+      }
+    );
+    expect(p).toContain("relatedNarrativeVerdict");
+    expect(p).toContain("Possibly related headlines");
   });
 
   it("returns static JSON instruction when no curated markets", () => {
@@ -30,6 +59,7 @@ describe("buildKalshiTradeDecisionPrompt", () => {
       }
     );
     expect(p).toContain("shouldTrade");
-    expect(p).toContain("No markets available");
+    expect(p).toMatch(/no candidate markets/i);
+    expect(p).toContain("scratchpad");
   });
 });

@@ -13,6 +13,7 @@ import {
   setKalshiMarketsCache,
   setKalshiMarketsRefreshInFlight
 } from "./market-state.js";
+import { kalshiMarketLiteFromListApiRow } from "./activity.js";
 import type { KalshiMarketLite } from "./types.js";
 
 async function refreshKalshiOpenMarketsInternal(): Promise<void> {
@@ -31,13 +32,8 @@ async function refreshKalshiOpenMarketsInternal(): Promise<void> {
 
     const markets = data.markets || [];
     for (const raw of markets) {
-      if (raw?.ticker) {
-        collected.push({
-          ticker: raw.ticker,
-          title: String(raw.title || raw.yes_sub_title || raw.no_sub_title || "").slice(0, 600),
-          event_ticker: raw.event_ticker
-        });
-      }
+      const lite = kalshiMarketLiteFromListApiRow(raw);
+      if (lite) collected.push(lite);
     }
 
     cursor = typeof data.cursor === "string" && data.cursor.length > 0 ? data.cursor : undefined;

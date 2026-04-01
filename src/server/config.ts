@@ -62,6 +62,43 @@ export const KALSHI_EMBED_MAX_MARKETS = Math.max(
 export const KALSHI_API_BASE =
   process.env.KALSHI_API_BASE || "https://api.elections.kalshi.com/trade-api/v2";
 
+/** WebSocket URL (production default). Demo: wss://demo-api.kalshi.co/trade-api/ws/v2 */
+export const KALSHI_WS_URL =
+  process.env.KALSHI_WS_URL || "wss://api.elections.kalshi.com/trade-api/ws/v2";
+
+/** Path used in the signed message for WS connect (timestamp + "GET" + this path). Must match Kalshi docs. */
+export const KALSHI_WS_SIGN_PATH = "/trade-api/ws/v2";
+
+/** API key id from Kalshi account (Profile → API Keys). */
+export const KALSHI_ACCESS_KEY_ID = (process.env.KALSHI_ACCESS_KEY_ID || "").trim();
+
+/** RSA private key PEM file path (recommended). */
+export const KALSHI_PRIVATE_KEY_PATH = (process.env.KALSHI_PRIVATE_KEY_PATH || "").trim();
+
+/**
+ * Inline PEM (optional). Use literal newlines or \n escapes. Prefer KALSHI_PRIVATE_KEY_PATH in production.
+ */
+export const KALSHI_PRIVATE_KEY_PEM = (process.env.KALSHI_PRIVATE_KEY_PEM || "").trim();
+
+export function kalshiPrivateKeyConfigured(): boolean {
+  return Boolean(KALSHI_PRIVATE_KEY_PATH || KALSHI_PRIVATE_KEY_PEM);
+}
+
+/** True when both key id and private key material are set (WebSocket + signed REST ready). */
+export function kalshiWsAuthConfigured(): boolean {
+  return Boolean(KALSHI_ACCESS_KEY_ID && kalshiPrivateKeyConfigured());
+}
+
+/**
+ * Max distinct tickers on one Kalshi WS `ticker` subscription (OPEN positions + watchlist).
+ * Open positions are always included; watchlist entries are trimmed if the union exceeds this.
+ * If the number of OPEN tickers alone exceeds this, all OPEN tickers are still kept (no cap on positions).
+ */
+export const KALSHI_WS_MAX_SUBSCRIBED_TICKERS = Math.max(
+  32,
+  Math.min(2000, Number(process.env.KALSHI_WS_MAX_SUBSCRIBED_TICKERS) || 200)
+);
+
 /** Paginated GET /markets page size (Kalshi caps per request; default 200). */
 export const KALSHI_MARKETS_PAGE_LIMIT = Math.min(
   1000,
@@ -201,3 +238,30 @@ export const RSS_FETCH_TIMEOUT_MS = Math.max(
   5000,
   Number(process.env.RSS_FETCH_TIMEOUT_MS) || 20_000
 );
+
+/** After RSS failures, skip future monitor cycles: skips = min(max, 2^streak - 1). Resets on success or this window. */
+export const RSS_BACKOFF_RESET_MS = Math.max(
+  3_600_000,
+  Number(process.env.RSS_BACKOFF_RESET_MS) || 72 * 3_600_000
+);
+
+export const RSS_BACKOFF_MAX_SKIP_CYCLES = Math.max(
+  1,
+  Math.min(127, Number(process.env.RSS_BACKOFF_MAX_SKIP_CYCLES) || 63)
+);
+
+/** Link other news items to the current headline when token overlap ≥ this (0–100) and timestamps within NEWS_RELATED_MAX_DELTA_MS. */
+export const NEWS_RELATED_MIN_OVERLAP_PCT = Math.max(
+  1,
+  Math.min(100, Number(process.env.NEWS_RELATED_MIN_OVERLAP_PCT) || 38)
+);
+
+export const NEWS_RELATED_MAX_DELTA_MS = Math.max(
+  3_600_000,
+  Number(process.env.NEWS_RELATED_MAX_DELTA_MS) || 48 * 3_600_000
+);
+
+export const NEWS_RELATED_MAX_LINKS = Math.max(1, Math.min(12, Number(process.env.NEWS_RELATED_MAX_LINKS) || 5));
+
+/** Only compare against this many most recent news docs (performance). */
+export const NEWS_RELATED_LOOKBACK = Math.max(20, Math.min(2000, Number(process.env.NEWS_RELATED_LOOKBACK) || 400));

@@ -7,3 +7,5 @@ coverage/
 .env*
 !.env.example
 local-db/
+todo.txt
+*.pem

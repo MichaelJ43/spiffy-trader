@@ -24,7 +24,10 @@ export async function loadKalshiMarketsSnapshotFromDb(): Promise<{
           all.push({
             ticker: it.ticker,
             title: String(it.title || ""),
-            event_ticker: it.event_ticker
+            event_ticker: it.event_ticker,
+            volume_24h: typeof it.volume_24h === "number" ? it.volume_24h : undefined,
+            volume: typeof it.volume === "number" ? it.volume : undefined,
+            open_interest: typeof it.open_interest === "number" ? it.open_interest : undefined
           });
         }
       }

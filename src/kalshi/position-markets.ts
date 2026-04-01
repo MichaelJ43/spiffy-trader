@@ -15,6 +15,34 @@ export function getPositionMarketSnapshots(): ReadonlyMap<string, PositionMarket
   return snapshots;
 }
 
+/**
+ * Apply a Kalshi WebSocket `ticker` channel payload to the in-memory position snapshot (merge bid/ask).
+ * Works even before REST has populated the market; improves mark-to-market between REST refreshes.
+ */
+export function applyKalshiWsTickerMessage(msg: any): void {
+  const ticker = msg?.market_ticker;
+  if (!ticker || typeof ticker !== "string") return;
+
+  const snap = snapshots.get(ticker);
+  const base = snap?.market ? { ...snap.market } : { ticker };
+
+  if (msg.yes_bid_dollars != null) base.yes_bid_dollars = msg.yes_bid_dollars;
+  if (msg.yes_ask_dollars != null) base.yes_ask_dollars = msg.yes_ask_dollars;
+  if (msg.yes_bid != null && base.yes_bid_dollars == null && base.yes_bid == null) base.yes_bid = msg.yes_bid;
+  if (msg.yes_ask != null && base.yes_ask_dollars == null && base.yes_ask == null) base.yes_ask = msg.yes_ask;
+  if (msg.last_price_dollars != null) base.last_price_dollars = msg.last_price_dollars;
+  if (msg.volume_24h != null) base.volume_24h = msg.volume_24h;
+  if (msg.open_interest != null) base.open_interest = msg.open_interest;
+
+  const yesMid = kalshiYesMidProbability(base);
+  snapshots.set(ticker, {
+    ticker,
+    fetchedAt: Date.now(),
+    market: base,
+    yesMid
+  });
+}
+
 export function summarizeMarketForRisk(m: any, ticker: string) {
   if (!m) return { ticker, error: "no_data" };
   return {
@@ -31,21 +59,34 @@ export function summarizeMarketForRisk(m: any, ticker: string) {
   };
 }
 
-/** Refresh Kalshi market docs for every distinct ticker in OPEN trades (throttled via kalshi client). */
-export async function refreshOpenPositionMarkets(): Promise<void> {
+/**
+ * Refresh Kalshi market docs for every distinct ticker in OPEN trades (throttled via kalshi client).
+ * @param retainSnapshotTickers Keep these tickers in the snapshot map without requiring OPEN (e.g. watchlist fed by WebSocket).
+ */
+export async function refreshOpenPositionMarkets(retainSnapshotTickers: string[] = []): Promise<string[]> {
   let trades: any[];
   try {
     trades = await listDocs("trades");
   } catch (e) {
     console.warn("Position markets: could not list trades:", e);
-    return;
+    return [];
   }
+
+  const retainExtra = [
+    ...new Set(retainSnapshotTickers.map((t) => String(t).trim()).filter(Boolean))
+  ];
 
   const open = trades.filter((t) => t.status === "OPEN" && t.ticker);
   const tickers = [...new Set(open.map((t) => String(t.ticker)))];
   if (tickers.length === 0) {
-    snapshots.clear();
-    return;
+    if (retainExtra.length === 0) {
+      snapshots.clear();
+    } else {
+      for (const key of [...snapshots.keys()]) {
+        if (!retainExtra.includes(key)) snapshots.delete(key);
+      }
+    }
+    return [];
   }
 
   for (const ticker of tickers) {
@@ -66,7 +107,10 @@ export async function refreshOpenPositionMarkets(): Promise<void> {
     }
   }
 
+  const retainSet = new Set<string>([...tickers, ...retainExtra]);
   for (const key of [...snapshots.keys()]) {
-    if (!tickers.includes(key)) snapshots.delete(key);
+    if (!retainSet.has(key)) snapshots.delete(key);
   }
+
+  return tickers;
 }

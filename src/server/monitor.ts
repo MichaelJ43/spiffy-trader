@@ -9,15 +9,21 @@ import {
   recencyWeightedRatingStatsByKey
 } from "../lib/trade-ratings.js";
 import { checkOllamaReachable } from "../ollama/embed.js";
+import { getNewsSourcesWeighted } from "../performance/news-sources.js";
+import { buildRelatedStoryPromptSlice, findRelatedNewsStories } from "../news/related-stories.js";
 import {
-  applyRssFetchStats,
-  getNewsSourcesWeighted
-} from "../performance/news-sources.js";
+  applyRssFetchFailureWithBackoff,
+  applyRssFetchSuccessWithBackoff,
+  planRssFetchAttempt
+} from "../rss/backoff.js";
 import { fetchRssFeed } from "../rss/fetch.js";
 import { curateMarketsForNews } from "../kalshi/curate.js";
 import { ensureKalshiMarketsCache } from "../kalshi/cache.js";
 import { kalshiOpenMarketsCache } from "../kalshi/market-state.js";
-import { buildKalshiTradeDecisionPrompt } from "../kalshi/prompts.js";
+import {
+  buildKalshiTradeDecisionPrompt,
+  normalizeTradeDecisionAnalysis
+} from "../kalshi/prompts.js";
 import {
   estimateKalshiTakerFeeUsd,
   maxAffordableNotionalWorstCase
@@ -73,7 +79,7 @@ export async function monitorAndTrade() {
     const reasoningRatingStats = recencyWeightedRatingStatsByKey(historicalTrades, (t) =>
       getReasoningKey(t.reasoning || "") || null
     );
-    const existingNews = await listDocs("news");
+    const existingNews: any[] = await listDocs("news");
     const rssSourceDocsByUrl = new Map<string, any>();
     for (const d of await listDocs("news_sources")) {
       const row = d as any;
@@ -87,6 +93,27 @@ export async function monitorAndTrade() {
     const feedResults = await Promise.all(
       sortedSources.map(async (source) => {
         const couchDoc = rssSourceDocsByUrl.get(source.url);
+        const nowMs = Date.now();
+        if (!couchDoc?._id) {
+          try {
+            const feed = await fetchRssFeed(source.url);
+            return feed.items.slice(0, 2).map((item) => ({
+              source: feed.title || "RSS Feed",
+              sourceUrl: source.url,
+              content: `${item.title}: ${item.contentSnippet || item.content}`,
+              timestamp: item.pubDate || new Date().toISOString(),
+              link: item.link
+            }));
+          } catch {
+            return [];
+          }
+        }
+        const { doc: readyDoc, shouldFetch } = planRssFetchAttempt(couchDoc, nowMs);
+        if (!shouldFetch) {
+          await couchRequest("PUT", `/news_sources/${readyDoc._id}`, readyDoc);
+          rssSourceDocsByUrl.set(source.url, readyDoc);
+          return [];
+        }
         try {
           const feed = await fetchRssFeed(source.url);
           const latestItems = feed.items.slice(0, 2).map((item) => ({
@@ -96,18 +123,14 @@ export async function monitorAndTrade() {
             timestamp: item.pubDate || new Date().toISOString(),
             link: item.link
           }));
-          if (couchDoc?._id) {
-            const updated = applyRssFetchStats(couchDoc, true);
-            await couchRequest("PUT", `/news_sources/${updated._id}`, updated);
-            rssSourceDocsByUrl.set(source.url, updated);
-          }
+          const updated = applyRssFetchSuccessWithBackoff(readyDoc);
+          await couchRequest("PUT", `/news_sources/${updated._id}`, updated);
+          rssSourceDocsByUrl.set(source.url, updated);
           return latestItems;
         } catch {
-          if (couchDoc?._id) {
-            const updated = applyRssFetchStats(couchDoc, false);
-            await couchRequest("PUT", `/news_sources/${updated._id}`, updated);
-            rssSourceDocsByUrl.set(source.url, updated);
-          }
+          const updated = applyRssFetchFailureWithBackoff(readyDoc, nowMs);
+          await couchRequest("PUT", `/news_sources/${updated._id}`, updated);
+          rssSourceDocsByUrl.set(source.url, updated);
           return [];
         }
       })
@@ -132,6 +155,17 @@ export async function monitorAndTrade() {
     for (const item of newItems) {
       if (botStatus.portfolioHalted) break;
 
+      const relatedRaw = findRelatedNewsStories(existingNews, item.content, item.timestamp);
+      const newsById = new Map(existingNews.map((n: any) => [n._id, n]));
+      const relatedForPrompt = relatedRaw.map((r) =>
+        buildRelatedStoryPromptSlice(r, newsById.get(r.id))
+      );
+      const relatedPersist = relatedRaw.map((r) => ({
+        newsId: r.id,
+        overlapPercent: r.overlapPercent,
+        deltaMs: r.deltaMs
+      }));
+
       const curatedMarkets = await curateMarketsForNews(
         item.content,
         kalshiOpenMarketsCache,
@@ -146,7 +180,8 @@ export async function monitorAndTrade() {
         confidenceScore: sourceScore,
         feedWeight,
         tradingBootstrap,
-        availableBalance: Math.max(0, botStatus.cashBalance)
+        availableBalance: Math.max(0, botStatus.cashBalance),
+        relatedStories: relatedForPrompt.length > 0 ? relatedForPrompt : undefined
       });
 
       console.log(
@@ -161,45 +196,60 @@ export async function monitorAndTrade() {
         failureCount++;
       }
 
-      if (!analysis) {
+      const decision = normalizeTradeDecisionAnalysis(analysis);
+      if (!decision) {
         failureCount++;
       }
 
-      if (analysis) {
+      if (decision) {
         analysisCount++;
-        await couchRequest("POST", "/news", {
+        const newsPayload = {
           ...item,
-          sentiment: analysis.sentiment,
-          impactScore: analysis.impactScore,
-          reasoning: analysis.reasoning,
-          suggestedTicker: analysis.suggestedTicker,
-          shouldTrade: analysis.shouldTrade,
-          tradeAmount: analysis.tradeAmount,
-          sourceConfidenceScore: sourceScore
-        });
+          sentiment: decision.sentiment,
+          impactScore: decision.impactScore,
+          relevanceScore: decision.relevanceScore,
+          edgeScore: decision.edgeScore,
+          scratchpad: decision.scratchpad,
+          relatedNarrativeVerdict: decision.relatedNarrativeVerdict,
+          relatedNarrativeWhatChanged: decision.relatedNarrativeWhatChanged,
+          reasoning: decision.reasoning,
+          suggestedTicker: decision.suggestedTicker,
+          shouldTrade: decision.shouldTrade,
+          tradeAmount: decision.tradeAmount,
+          sourceConfidenceScore: sourceScore,
+          ...(relatedPersist.length > 0 ? { relatedStories: relatedPersist } : {})
+        };
+        const postRes = await couchRequest("POST", "/news", newsPayload);
+        if (postRes?.id) {
+          existingNews.unshift({
+            _id: postRes.id,
+            _rev: postRes.rev,
+            ...newsPayload
+          });
+        }
 
-        const reasoningKey = getReasoningKey(analysis.reasoning || "");
+        const reasoningKey = getReasoningKey(decision.reasoning || "");
         const reasoningScore = blendRecencyPrior(
           reasoningRatingStats.get(reasoningKey),
           50,
           SOURCE_RATING_PRIOR_MIN_TRADES
         );
         const recordConfidence = clamp(
-          (Number(analysis.impactScore) || 0) * 0.6 + sourceScore * 0.25 + reasoningScore * 0.15,
+          decision.impactScore * 0.6 + sourceScore * 0.25 + reasoningScore * 0.15,
           0,
           100
         );
 
-        const wantsTrade = analysis.shouldTrade === true;
-        const suggestedRaw = String(analysis.suggestedTicker ?? "").trim();
+        const wantsTrade = decision.shouldTrade === true;
+        const suggestedRaw = decision.suggestedTicker;
         const tickerAllowed =
           suggestedRaw !== "" && allowedTickerSet.size > 0 && allowedTickerSet.has(suggestedRaw);
 
         const balanceCap = Math.max(0, botStatus.cashBalance);
         const affordableCap = maxAffordableNotionalWorstCase(botStatus.cashBalance);
-        const rawAmt = analysis.tradeAmount;
+        const rawAmt = decision.tradeAmount;
         let resolvedAmount: number | null = null;
-        if (rawAmt !== null && rawAmt !== undefined && rawAmt !== "") {
+        if (rawAmt !== null && rawAmt !== undefined) {
           const n = typeof rawAmt === "number" ? rawAmt : Number(rawAmt);
           if (Number.isFinite(n)) {
             resolvedAmount = clamp(n, 0, Math.min(balanceCap, affordableCap));
@@ -233,10 +283,12 @@ export async function monitorAndTrade() {
               amount: Number(resolvedAmount.toFixed(2)),
               status: "OPEN",
               timestamp: new Date().toISOString(),
-              reasoning: analysis.reasoning,
+              reasoning: decision.reasoning,
               sourceUrl: item.sourceUrl,
               currentPnL: 0,
-              impactScore: analysis.impactScore,
+              impactScore: decision.impactScore,
+              relevanceScore: decision.relevanceScore,
+              edgeScore: decision.edgeScore,
               confidenceScore: Number(recordConfidence.toFixed(2)),
               sourcePerformanceScore: Number(sourceScore.toFixed(2)),
               reasoningPerformanceScore: Number(reasoningScore.toFixed(2)),
@@ -248,8 +300,11 @@ export async function monitorAndTrade() {
                   content: item.content,
                   timestamp: item.timestamp,
                   link: item.link || "",
-                  impactScore: analysis.impactScore,
-                  sentiment: analysis.sentiment
+                  impactScore: decision.impactScore,
+                  relevanceScore: decision.relevanceScore,
+                  edgeScore: decision.edgeScore,
+                  relatedNarrativeVerdict: decision.relatedNarrativeVerdict,
+                  sentiment: decision.sentiment
                 }
               ]
             };
@@ -289,7 +344,8 @@ export async function monitorAndTrade() {
           ...item,
           sentiment: "Unknown",
           impactScore: 0,
-          reasoning: "AI Analysis unavailable (Check API Key or Ollama connection)."
+          reasoning: "AI Analysis unavailable (Check API Key or Ollama connection).",
+          ...(relatedPersist.length > 0 ? { relatedStories: relatedPersist } : {})
         });
       }
     }

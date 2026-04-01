@@ -516,7 +516,14 @@ export default function Dashboard({ onOpenDocs }: DashboardProps) {
                           <div className={cn("w-1.5 h-1.5 rounded-full", item.sentiment === "Positive" ? "bg-green-500" : "bg-red-500")} />
                           <span className="text-[10px] font-mono uppercase">{item.sentiment}</span>
                         </div>
-                        <div className="text-[10px] font-mono">Impact: {item.impactScore}%</div>
+                        <div className="text-[10px] font-mono text-right space-y-0.5">
+                          <div>Impact: {item.impactScore ?? "—"}%</div>
+                          {typeof item.relevanceScore === "number" && typeof item.edgeScore === "number" ? (
+                            <div className="opacity-70">
+                              Rel {item.relevanceScore}% · Edge {item.edgeScore}%
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   ))

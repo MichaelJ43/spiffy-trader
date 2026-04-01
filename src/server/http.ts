@@ -10,10 +10,13 @@ import { runAiExitReview } from "../ai/exit-review.js";
 import { ensureKalshiMarketsCache } from "../kalshi/cache.js";
 import { kalshiOpenMarketsCache } from "../kalshi/market-state.js";
 import { getPositionMarketSnapshots, refreshOpenPositionMarkets } from "../kalshi/position-markets.js";
+import { getActiveWatchlistTickers } from "../db/market-watchlist.js";
+import { getKalshiWsStatus, syncKalshiWsOpenAndWatchlist } from "../kalshi/ws-client.js";
 import {
   KALSHI_OPEN_POSITION_REFRESH_MS,
   PORT,
-  PORTFOLIO_DEPLETED_THRESHOLD_USD
+  PORTFOLIO_DEPLETED_THRESHOLD_USD,
+  kalshiWsAuthConfigured
 } from "./config.js";
 import { markToMarketOpenHoldings } from "./portfolio-metrics.js";
 import { getTotalPortfolioValueUsd } from "./portfolio-halt.js";
@@ -79,7 +82,8 @@ export async function startServer() {
       aiInitialized: ollamaReady || geminiReady,
       aiProvider,
       ollamaReachable: ollamaReady,
-      geminiConfigured: geminiReady
+      geminiConfigured: geminiReady,
+      kalshiWs: getKalshiWsStatus()
     });
   });
   app.post("/api/trading/resume", async (req, res) => {
@@ -212,13 +216,20 @@ export async function startServer() {
   await initializeDatabase();
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Spiffy Trader running on http://localhost:${PORT}`);
+    console.log(
+      kalshiWsAuthConfigured()
+        ? "Kalshi WebSocket: enabled (OPEN positions + market_watchlist tickers, within cap)."
+        : "Kalshi WebSocket: off (set KALSHI_ACCESS_KEY_ID + KALSHI_PRIVATE_KEY_PATH in .env.local)."
+    );
     void ensureKalshiMarketsCache();
     void monitorAndTrade();
 
     const positionWatchTick = async () => {
       if (botStatus.portfolioHalted) return;
       try {
-        await refreshOpenPositionMarkets();
+        const watchTickers = await getActiveWatchlistTickers();
+        const openTickers = await refreshOpenPositionMarkets(watchTickers);
+        syncKalshiWsOpenAndWatchlist(openTickers, watchTickers);
         await runAiExitReview();
       } catch (e) {
         console.error("Open-position market watch failed:", e);
