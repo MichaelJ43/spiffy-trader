@@ -16,6 +16,10 @@
 
 ## What you see in the UI
 
+<p align="center">
+  <img src="docs/dashboard.png" alt="Spiffy Trader dashboard: portfolio metrics, performance chart, execution history, and RSS news with sentiment" width="920" />
+</p>
+
 - Portfolio value and cash, with open YES positions marked to mids when snapshots exist.
 - A performance chart (replay-style) over selectable windows.
 - Execution history with links to the Kalshi site for comparison.
