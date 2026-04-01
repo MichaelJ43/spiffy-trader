@@ -17,7 +17,10 @@ import { fetchRssFeed } from "../rss/fetch.js";
 import { curateMarketsForNews } from "../kalshi/curate.js";
 import { ensureKalshiMarketsCache } from "../kalshi/cache.js";
 import { kalshiOpenMarketsCache } from "../kalshi/market-state.js";
-import { buildKalshiTradeDecisionPrompt } from "../kalshi/prompts.js";
+import {
+  buildKalshiTradeDecisionPrompt,
+  normalizeTradeDecisionAnalysis
+} from "../kalshi/prompts.js";
 import {
   estimateKalshiTakerFeeUsd,
   maxAffordableNotionalWorstCase
@@ -166,40 +169,54 @@ export async function monitorAndTrade() {
       }
 
       if (analysis) {
+        const decision = normalizeTradeDecisionAnalysis(analysis);
+        if (!decision) {
+          failureCount++;
+          await couchRequest("POST", "/news", {
+            ...item,
+            sentiment: "Unknown",
+            impactScore: 0,
+            reasoning: "AI Analysis returned an invalid JSON shape."
+          });
+          continue;
+        }
+
         analysisCount++;
         await couchRequest("POST", "/news", {
           ...item,
-          sentiment: analysis.sentiment,
-          impactScore: analysis.impactScore,
-          reasoning: analysis.reasoning,
-          suggestedTicker: analysis.suggestedTicker,
-          shouldTrade: analysis.shouldTrade,
-          tradeAmount: analysis.tradeAmount,
+          sentiment: decision.sentiment,
+          impactScore: decision.impactScore,
+          relevanceScore: decision.relevanceScore,
+          edgeScore: decision.edgeScore,
+          reasoning: decision.reasoning,
+          suggestedTicker: decision.suggestedTicker,
+          shouldTrade: decision.shouldTrade,
+          tradeAmount: decision.tradeAmount,
           sourceConfidenceScore: sourceScore
         });
 
-        const reasoningKey = getReasoningKey(analysis.reasoning || "");
+        const reasoningKey = getReasoningKey(decision.reasoning || "");
         const reasoningScore = blendRecencyPrior(
           reasoningRatingStats.get(reasoningKey),
           50,
           SOURCE_RATING_PRIOR_MIN_TRADES
         );
         const recordConfidence = clamp(
-          (Number(analysis.impactScore) || 0) * 0.6 + sourceScore * 0.25 + reasoningScore * 0.15,
+          decision.impactScore * 0.6 + sourceScore * 0.25 + reasoningScore * 0.15,
           0,
           100
         );
 
-        const wantsTrade = analysis.shouldTrade === true;
-        const suggestedRaw = String(analysis.suggestedTicker ?? "").trim();
+        const wantsTrade = decision.shouldTrade === true;
+        const suggestedRaw = String(decision.suggestedTicker ?? "").trim();
         const tickerAllowed =
           suggestedRaw !== "" && allowedTickerSet.size > 0 && allowedTickerSet.has(suggestedRaw);
 
         const balanceCap = Math.max(0, botStatus.cashBalance);
         const affordableCap = maxAffordableNotionalWorstCase(botStatus.cashBalance);
-        const rawAmt = analysis.tradeAmount;
+        const rawAmt = decision.tradeAmount;
         let resolvedAmount: number | null = null;
-        if (rawAmt !== null && rawAmt !== undefined && rawAmt !== "") {
+        if (rawAmt != null) {
           const n = typeof rawAmt === "number" ? rawAmt : Number(rawAmt);
           if (Number.isFinite(n)) {
             resolvedAmount = clamp(n, 0, Math.min(balanceCap, affordableCap));
@@ -233,10 +250,10 @@ export async function monitorAndTrade() {
               amount: Number(resolvedAmount.toFixed(2)),
               status: "OPEN",
               timestamp: new Date().toISOString(),
-              reasoning: analysis.reasoning,
+              reasoning: decision.reasoning,
               sourceUrl: item.sourceUrl,
               currentPnL: 0,
-              impactScore: analysis.impactScore,
+              impactScore: decision.impactScore,
               confidenceScore: Number(recordConfidence.toFixed(2)),
               sourcePerformanceScore: Number(sourceScore.toFixed(2)),
               reasoningPerformanceScore: Number(reasoningScore.toFixed(2)),
@@ -248,8 +265,8 @@ export async function monitorAndTrade() {
                   content: item.content,
                   timestamp: item.timestamp,
                   link: item.link || "",
-                  impactScore: analysis.impactScore,
-                  sentiment: analysis.sentiment
+                  impactScore: decision.impactScore,
+                  sentiment: decision.sentiment
                 }
               ]
             };

@@ -44,6 +44,13 @@ function formatYesPrice(p: unknown): string {
   return `${(n * 100).toFixed(1)}%`;
 }
 
+/** 0–100 impact / relevance / edge scores stored as numbers */
+function formatScorePct(n: unknown): string {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return "—";
+  return `${Math.round(x)}%`;
+}
+
 /** Thresholds vs ~60s server monitor loop: under 90s fresh, under 3m lagging, else stale. */
 function formatSyncLag(ms: number): string {
   const totalSec = Math.floor(ms / 1000);
@@ -511,12 +518,42 @@ export default function Dashboard({ onOpenDocs }: DashboardProps) {
                         <span className="text-[10px] opacity-40">{format(new Date(item.timestamp), "HH:mm")}</span>
                       </div>
                       <p className="text-xs leading-relaxed opacity-80">{item.content}</p>
-                      <div className="pt-2 border-t border-white/5 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className={cn("w-1.5 h-1.5 rounded-full", item.sentiment === "Positive" ? "bg-green-500" : "bg-red-500")} />
+                      <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-2 min-w-0">
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div
+                            className={cn(
+                              "w-1.5 h-1.5 rounded-full shrink-0",
+                              item.sentiment === "Positive"
+                                ? "bg-green-500"
+                                : item.sentiment === "Negative"
+                                  ? "bg-red-500"
+                                  : "bg-white/35"
+                            )}
+                          />
                           <span className="text-[10px] font-mono uppercase">{item.sentiment}</span>
                         </div>
-                        <div className="text-[10px] font-mono">Impact: {item.impactScore}%</div>
+                        <div className="text-[10px] font-mono flex items-center justify-end gap-1.5 min-w-0">
+                          {Number.isFinite(Number(item.relevanceScore)) &&
+                            Number.isFinite(Number(item.edgeScore)) && (
+                              <>
+                                <span className="text-white/45 whitespace-nowrap">
+                                  Rel: {formatScorePct(item.relevanceScore)}
+                                </span>
+                                <span className="text-white/30 select-none" aria-hidden>
+                                  ·
+                                </span>
+                                <span className="text-white/45 whitespace-nowrap">
+                                  Edge: {formatScorePct(item.edgeScore)}
+                                </span>
+                                <span className="text-white/30 select-none" aria-hidden>
+                                  ·
+                                </span>
+                              </>
+                            )}
+                          <span className="font-bold text-white whitespace-nowrap">
+                            Impact: {formatScorePct(item.impactScore)}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   ))
