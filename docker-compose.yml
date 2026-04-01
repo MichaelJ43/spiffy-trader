@@ -72,6 +72,10 @@ services:
         condition: service_healthy
     restart: "no"
 
+  # CouchDB data uses a named Docker volume (not a repo bind mount). Bind-mounting
+  # ./local-db on Windows/Mac often causes corruption (missing files / enoent) because
+  # the live DB sits on a host filesystem with weaker sync/locking than Linux ext4.
+  # The active data dir stays inside Docker’s VM; persistence is via the volume.
   couchdb:
     image: couchdb:3
     environment:
@@ -80,7 +84,8 @@ services:
     ports:
       - "5984:5984"
     volumes:
-      - ./local-db:/opt/couchdb/data
+      - couchdb_data:/opt/couchdb/data
 
 volumes:
   ollama_data:
+  couchdb_data:

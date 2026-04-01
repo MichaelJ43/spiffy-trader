@@ -30,7 +30,7 @@ In-app **Documentation** (same content as `src/components/DocumentationPage.tsx`
 ## Stack and data
 
 - **Kalshi** — Read-only use of the public markets API (listings and quotes). No order API; **this is not live trading.**
-- **CouchDB** — Local state (trades, news, bot status, RSS sources, cached open markets). Point `COUCHDB_URL` (and credentials) at your instance; defaults match a typical local setup.
+- **CouchDB** — Local state (trades, news, bot status, RSS sources, cached open markets). Point `COUCHDB_URL` (and credentials) at your instance; defaults match a typical local setup. With **Docker Compose**, CouchDB uses a **named volume** (not a folder in the repo) so the database files live on Docker’s Linux filesystem—safer than bind-mounting a Windows path, which often causes CouchDB sync/corruption issues.
 - **Ollama** — Generation and optional embeddings (`OLLAMA_MODEL`, `OLLAMA_EMBED_MODEL`, etc.). See `.env.example` for common variables.
 
 Models can be wrong; the UI is for experimentation and learning, **not** financial advice.
@@ -57,3 +57,19 @@ After this repo is on GitHub, you can add a **live pass/fail** badge next to the
 1. Install dependencies: `npm install`
 2. Copy `.env.example` to `.env.local` and set at least CouchDB URL/credentials, Ollama settings, and optionally `GEMINI_API_KEY`.
 3. Run the app: `npm run dev` (serves on port 3000 by default).
+
+### Docker Compose
+
+Run the full stack (app, CouchDB, Ollama) with:
+
+`docker compose --env-file .env.local up --build`
+
+CouchDB data is stored in the `couchdb_data` **named volume**, not `./local-db`. That avoids exposing the active database directory through a host bind mount (a common cause of corruption on Docker Desktop for Windows).
+
+**Backups** (optional): snapshot the volume when containers are stopped, e.g. from the repo directory (volume name is usually `{folder}_couchdb_data` for this repo’s folder name; confirm with `docker volume ls`):
+
+```powershell
+docker run --rm -v spiffy-trader_couchdb_data:/data -v "${PWD}:/out" alpine tar czf /out/couchdb-backup.tgz -C /data .
+```
+
+If your Compose project name differs, replace `spiffy-trader_couchdb_data` with the name shown for `couchdb_data`.
