@@ -15,10 +15,13 @@ import { getActiveWatchlistTickers } from "../db/market-watchlist.js";
 import { getKalshiWsStatus, syncKalshiWsOpenAndWatchlist } from "../kalshi/ws-client.js";
 import {
   KALSHI_OPEN_POSITION_REFRESH_MS,
+  OLLAMA_MODEL,
+  OLLAMA_MODEL_FROM_ENV,
   PORT,
   PORTFOLIO_DEPLETED_THRESHOLD_USD,
   kalshiWsAuthConfigured
 } from "./config.js";
+import { buildLlmCapacitySnapshot } from "./gemma4-hardware.js";
 import { markToMarketOpenHoldings } from "./portfolio-metrics.js";
 import { getTotalPortfolioValueUsd } from "./portfolio-halt.js";
 import { monitorAndTrade } from "./monitor.js";
@@ -45,6 +48,15 @@ export async function startServer() {
   app.use(express.json());
 
   app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
+  app.get("/api/system/llm-capacity", (_req, res) => {
+    try {
+      const snap = buildLlmCapacitySnapshot(OLLAMA_MODEL, OLLAMA_MODEL_FROM_ENV !== null);
+      res.json(snap);
+    } catch (e: any) {
+      console.error("GET /api/system/llm-capacity failed:", e);
+      res.status(500).json({ error: e?.message || "llm-capacity failed" });
+    }
+  });
   app.get("/api/status", async (_req, res) => {
     try {
       const statusDoc = await couchRequest("GET", "/status/current");
@@ -224,10 +236,19 @@ export async function startServer() {
   await initializeDatabase();
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Spiffy Trader running on http://localhost:${PORT}`);
+    try {
+      const snap = buildLlmCapacitySnapshot(OLLAMA_MODEL, OLLAMA_MODEL_FROM_ENV !== null);
+      const src = snap.envOverride ? "OLLAMA_MODEL" : "auto (RAM/VRAM)";
+      console.log(
+        `Ollama LLM: ${snap.ollamaModelEffective} [${src}] — budget ~${snap.hardware.effectiveBudgetGb.toFixed(1)} GiB (${snap.hardware.budgetRule}; ${snap.hardware.cpuKind} CPU, ${snap.hardware.gpuKind} GPU)`
+      );
+    } catch (e) {
+      console.warn("Ollama LLM capacity log skipped:", e);
+    }
     console.log(
       kalshiWsAuthConfigured()
         ? "Kalshi WebSocket: enabled (OPEN positions + market_watchlist tickers, within cap)."
-        : "Kalshi WebSocket: off (set KALSHI_ACCESS_KEY_ID + KALSHI_PRIVATE_KEY_PATH in .env.local)."
+        : "Kalshi WebSocket: off (set KALSHI_ACCESS_KEY_ID + KALSHI_PRIVATE_KEY_PATH in `.env.local`)."
     );
     void ensureKalshiMarketsCache();
     void monitorAndTrade();

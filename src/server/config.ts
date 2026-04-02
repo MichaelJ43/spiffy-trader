@@ -1,3 +1,5 @@
+import { resolveOllamaModelFromHardware } from "./gemma4-hardware.js";
+
 export const PORT = 3000;
 
 /**
@@ -93,11 +95,16 @@ export function defaultRecencyPriorForNewsSourceUrl(url: string): number {
 }
 
 export const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
+
+const ollamaModelEnv = process.env.OLLAMA_MODEL?.trim();
+/** Set when the operator pinned `OLLAMA_MODEL` (skips RAM/VRAM auto-sizing). */
+export const OLLAMA_MODEL_FROM_ENV = ollamaModelEnv ? ollamaModelEnv : null;
+
 /**
- * Default chat model for `/api/generate` (trade JSON, source discovery). Override with `OLLAMA_MODEL`.
- * Gemma 4 26B MoE (instruction-tuned, Q4_K_M); see https://ollama.com/library/gemma4 — `ollama pull` this tag.
+ * Chat model for `/api/generate` (trade JSON, source discovery). Set `OLLAMA_MODEL` to pin a tag;
+ * otherwise the tag is chosen from RAM/VRAM + CPU/GPU heuristics (see `src/server/gemma4-hardware.ts`).
  */
-export const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "gemma4:26b-a4b-it-q4_K_M";
+export const OLLAMA_MODEL = ollamaModelEnv || resolveOllamaModelFromHardware();
 
 /** Upper bound for Ollama /api/generate; resolves as soon as the model responds (not a 5-minute wait). */
 export const OLLAMA_GENERATE_TIMEOUT_MS = Math.max(
