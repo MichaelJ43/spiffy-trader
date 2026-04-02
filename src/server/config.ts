@@ -93,7 +93,11 @@ export function defaultRecencyPriorForNewsSourceUrl(url: string): number {
 }
 
 export const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
-export const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llama3.1:8b";
+/**
+ * Default chat model for `/api/generate` (trade JSON, source discovery). Override with `OLLAMA_MODEL`.
+ * Gemma 4 26B MoE (instruction-tuned, Q4_K_M); see https://ollama.com/library/gemma4 — `ollama pull` this tag.
+ */
+export const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "gemma4:26b-a4b-it-q4_K_M";
 
 /** Upper bound for Ollama /api/generate; resolves as soon as the model responds (not a 5-minute wait). */
 export const OLLAMA_GENERATE_TIMEOUT_MS = Math.max(
