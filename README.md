@@ -34,7 +34,9 @@ In-app **Documentation** (same content as `src/components/DocumentationPage.tsx`
 
 - **Kalshi** — Read-only use of the public markets API (listings and quotes). No order API; **this is not live trading.**
 - **CouchDB** — Local state (trades, news, bot status, RSS sources, cached open Kalshi markets, **market_watchlist**). Point `COUCHDB_URL` (and credentials) at your instance; defaults match a typical local setup. With **Docker Compose**, CouchDB uses a **named volume** (not a folder in the repo) so the database files live on Docker’s Linux filesystem—safer than bind-mounting a Windows path, which often causes CouchDB sync/corruption issues. Optional **reference** JSON for Couch layout and entity sketches: `src/db/local-db-config.json`, `src/db/local-db-blueprint.json` (not loaded at runtime—see `src/db.ts` for live config).
-- **Ollama** — Generation and optional embeddings (`OLLAMA_MODEL`, `OLLAMA_EMBED_MODEL`, etc.). See `.env.example` for common variables.
+- **Ollama** — Generation and optional embeddings (`OLLAMA_EMBED_MODEL`, etc.). See `.env.example` for common variables.
+  - **`OLLAMA_MODEL`** — If you set this, that tag is used for JSON generation (trade decisions, source discovery). If you **omit** it, the app picks a **Gemma 4** tag from [Ollama’s library](https://ollama.com/library/gemma4) using heuristics in `src/server/gemma4-hardware.ts`: total RAM, optional **NVIDIA VRAM** via `nvidia-smi` when present, and **Apple Silicon vs Intel/AMD** (unified memory vs CPU-oriented budgets). This is approximate—pin `OLLAMA_MODEL` in production or when you want a specific quant.
+  - **Inspect at runtime:** `GET /api/system/llm-capacity` returns the effective model, hardware snapshot, recommendation, and the full Gemma 4 tier table. Startup also logs one line with the same choice (`OLLAMA_MODEL` vs auto).
 
 Models can be wrong; the UI is for experimentation and learning, **not** financial advice.
 
@@ -51,10 +53,10 @@ The [CI workflow](.github/workflows/ci.yml) runs the same steps as `npm run veri
 
 ## Run locally
 
-**Prerequisites:** Node.js, a running **CouchDB** instance, and **Ollama** (with your chosen chat and, if you want semantic matching, embedding models pulled). Optional: `GEMINI_API_KEY` for Gemini as a backup to Ollama.
+**Prerequisites:** Node.js, a running **CouchDB** instance, and **Ollama** (pull the chat model you want, or rely on auto-selection and pull the tag the app logs). For semantic news↔market matching, pull your embedding model (e.g. `nomic-embed-text`) if `OLLAMA_EMBED_MODEL` is enabled. Optional: `GEMINI_API_KEY` for Gemini as a backup to Ollama.
 
 1. Install dependencies: `npm install`
-2. Copy `.env.example` to `.env.local` and set at least CouchDB URL/credentials, Ollama settings, and optionally `GEMINI_API_KEY`.
+2. Copy `.env.example` to `.env.local` and set at least CouchDB URL/credentials, and optionally `OLLAMA_MODEL` (omit for auto-sized Gemma 4), embedding/Ollama URLs, and `GEMINI_API_KEY`.
 3. Run the app: `npm run dev` (serves on port 3000 by default).
 
 ### Docker Compose
@@ -62,6 +64,8 @@ The [CI workflow](.github/workflows/ci.yml) runs the same steps as `npm run veri
 Run the full stack (app, CouchDB, Ollama) with:
 
 `docker compose --env-file .env.local up --build`
+
+Compose defaults `OLLAMA_MODEL` for the Ollama service (see `docker-compose.yml`). To use the app’s **auto-sized** Gemma 4 choice instead, align or clear `OLLAMA_MODEL` in your env so the Node process can pick a tag; ensure that model is pulled inside the Ollama container.
 
 CouchDB data is stored in the `couchdb_data` **named volume**, not `./local-db`. That avoids exposing the active database directory through a host bind mount (a common cause of corruption on Docker Desktop for Windows).
 

@@ -37,6 +37,7 @@ import {
   MONITOR_POST_LOOP_MS,
   OLLAMA_URL,
   OLLAMA_MODEL,
+  OLLAMA_MODEL_FROM_ENV,
   SOURCE_RATING_PRIOR_MIN_TRADES,
   TRADE_BOOTSTRAP_UNTIL_RATED
 } from "./config.js";
@@ -63,7 +64,8 @@ export async function monitorAndTrade() {
   try {
     const ollamaReachable = await checkOllamaReachable();
     if (ollamaReachable) {
-      console.log(`AI: Ollama first (${OLLAMA_URL}, ${OLLAMA_MODEL}); Gemini ${currentAi ? "backup" : "off"}`);
+      const modelNote = OLLAMA_MODEL_FROM_ENV ? `model=${OLLAMA_MODEL}` : `model=${OLLAMA_MODEL} (auto-sized)`;
+      console.log(`AI: Ollama first (${OLLAMA_URL}, ${modelNote}); Gemini ${currentAi ? "backup" : "off"}`);
     } else {
       console.log(`AI: Ollama unreachable at ${OLLAMA_URL}; ${currentAi ? "using Gemini only" : "no LLM configured"}`);
     }
