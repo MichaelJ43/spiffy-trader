@@ -61,16 +61,16 @@ The [CI workflow](.github/workflows/ci.yml) runs the same steps as `npm run veri
 
 ### Docker Compose
 
-Definitions live under **`docker/`** (`Dockerfile`, `docker-compose.yml`, `docker-compose.apple.yml`). The default compose file enables **`gpus: all`** for Ollama (Linux/WSL + NVIDIA); **Docker Desktop on macOS** does not support that, so the Apple variant omits `gpus`.
+**`Dockerfile`**, **`docker-compose.yml`**, and **`docker-compose.apple.yml`** live at the **repo root**. The default compose file enables **`gpus: all`** for Ollama (Linux/WSL + NVIDIA); **Docker Desktop on macOS** does not support that, so the Apple variant omits `gpus`.
 
 From the repo root, use the wrapper (picks the right file automatically):
 
 - **Bash / Git Bash / macOS / Linux:** `chmod +x docker-compose.sh` once if needed, then `./docker-compose.sh --env-file .env.local up --build`
 - **PowerShell:** `.\docker-compose.ps1 --env-file .env.local up --build`
 
-Advanced: `docker compose -f docker/docker-compose.yml --project-directory . up --build` or set `DOCKER_COMPOSE_FILE=docker/docker-compose.yml` when calling the wrapper to force a specific file.
+Advanced: `docker compose -f docker-compose.yml --project-directory . up --build` or set `DOCKER_COMPOSE_FILE=docker-compose.yml` when calling the wrapper to force a specific file.
 
-Compose defaults `OLLAMA_MODEL` for the Ollama service (see `docker/docker-compose.yml`). To use the app’s **auto-sized** Gemma 4 choice instead, align or clear `OLLAMA_MODEL` in your env so the Node process can pick a tag; ensure that model is pulled inside the Ollama container.
+Compose defaults `OLLAMA_MODEL` for the Ollama service (see `docker-compose.yml`). To use the app’s **auto-sized** Gemma 4 choice instead, align or clear `OLLAMA_MODEL` in your env so the Node process can pick a tag; ensure that model is pulled inside the Ollama container.
 
 CouchDB data is stored in the `couchdb_data` **named volume**, not `./local-db`. That avoids exposing the active database directory through a host bind mount (a common cause of corruption on Docker Desktop for Windows).
 
