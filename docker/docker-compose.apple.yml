@@ -1,13 +1,11 @@
-# Default OLLAMA_MODEL targets the lead “newest” general model on Ollama’s library (see
-# https://ollama.com/library?sort=newest ). Nemotron Cascade 2 is a 30B MoE (~3B active),
-# a good match for RTX 4090 + ample system RAM. Override with OLLAMA_MODEL if you prefer
-# another tag (e.g. qwen3.5:27b).
+# Docker Desktop on macOS (Apple Silicon and Intel): no NVIDIA GPU passthrough — omit `gpus`.
+# Same stack as docker-compose.yml otherwise.
 
 services:
   spiffy-trader:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
     ports:
       - "3000:3000"
     environment:
@@ -52,7 +50,6 @@ services:
       - ollama_data:/root/.ollama
     ports:
       - "11434:11434"
-    gpus: all
     healthcheck:
       test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
       interval: 10s
@@ -72,10 +69,6 @@ services:
         condition: service_healthy
     restart: "no"
 
-  # CouchDB data uses a named Docker volume (not a repo bind mount). Bind-mounting
-  # ./local-db on Windows/Mac often causes corruption (missing files / enoent) because
-  # the live DB sits on a host filesystem with weaker sync/locking than Linux ext4.
-  # The active data dir stays inside Docker’s VM; persistence is via the volume.
   couchdb:
     image: couchdb:3
     environment:

@@ -61,11 +61,16 @@ The [CI workflow](.github/workflows/ci.yml) runs the same steps as `npm run veri
 
 ### Docker Compose
 
-Run the full stack (app, CouchDB, Ollama) with:
+Definitions live under **`docker/`** (`Dockerfile`, `docker-compose.yml`, `docker-compose.apple.yml`). The default compose file enables **`gpus: all`** for Ollama (Linux/WSL + NVIDIA); **Docker Desktop on macOS** does not support that, so the Apple variant omits `gpus`.
 
-`docker compose --env-file .env.local up --build`
+From the repo root, use the wrapper (picks the right file automatically):
 
-Compose defaults `OLLAMA_MODEL` for the Ollama service (see `docker-compose.yml`). To use the app’s **auto-sized** Gemma 4 choice instead, align or clear `OLLAMA_MODEL` in your env so the Node process can pick a tag; ensure that model is pulled inside the Ollama container.
+- **Bash / Git Bash / macOS / Linux:** `chmod +x docker-compose.sh` once if needed, then `./docker-compose.sh --env-file .env.local up --build`
+- **PowerShell:** `.\docker-compose.ps1 --env-file .env.local up --build`
+
+Advanced: `docker compose -f docker/docker-compose.yml --project-directory . up --build` or set `DOCKER_COMPOSE_FILE=docker/docker-compose.yml` when calling the wrapper to force a specific file.
+
+Compose defaults `OLLAMA_MODEL` for the Ollama service (see `docker/docker-compose.yml`). To use the app’s **auto-sized** Gemma 4 choice instead, align or clear `OLLAMA_MODEL` in your env so the Node process can pick a tag; ensure that model is pulled inside the Ollama container.
 
 CouchDB data is stored in the `couchdb_data` **named volume**, not `./local-db`. That avoids exposing the active database directory through a host bind mount (a common cause of corruption on Docker Desktop for Windows).
 
@@ -77,4 +82,4 @@ docker run --rm -v spiffy-trader_couchdb_data:/data -v "${PWD}:/out" alpine tar 
 
 If your Compose project name differs, replace `spiffy-trader_couchdb_data` with the name shown for `couchdb_data`.
 
-**If CouchDB returns 500s / `enoent` in logs** (often after a bad shutdown), stop the stack, remove the `couchdb_data` named volume, and run `docker compose up` again so Couch can re-init empty. That wipes local Couch data in that volume.
+**If CouchDB returns 500s / `enoent` in logs** (often after a bad shutdown), stop the stack, remove the `couchdb_data` named volume, and run `./docker-compose.sh up` (or the PowerShell wrapper) again so Couch can re-init empty. That wipes local Couch data in that volume.

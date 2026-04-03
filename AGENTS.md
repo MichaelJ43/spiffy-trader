@@ -55,6 +55,7 @@ src/trading/              # simulated platform execution
 src/lib/                  # utils, trade-ratings, text-match, portfolio-series, kalshi-links
 src/components/           # Dashboard, DocumentationPage (React)
 tests/                    # unit + integration + ui; setup in tests/setup/
+docker/                   # Dockerfile + compose files; root docker-compose.sh / docker-compose.ps1 wrappers
 ```
 
 **Import convention:** ESM with **`.js` extensions** in import paths for local compiled modules (e.g. `from "./config.js"`). Path alias `@/*` → repo root (see `tsconfig.json`).
@@ -67,7 +68,7 @@ tests/                    # unit + integration + ui; setup in tests/setup/
 - **Server config aggregation:** `src/server/config.ts` — ports, RSS seeds, Ollama URL/model resolution, embed model, Kalshi caps, timeouts, **Gemma 4 auto model** when `OLLAMA_MODEL` unset (`src/server/gemma4-hardware.ts`), etc.
 - **LLM model selection:** If `OLLAMA_MODEL` is **not** set, a Gemma 4 tag is chosen from hardware heuristics. If set, that tag wins. Inspect `GET /api/system/llm-capacity`.
 - **CouchDB:** `COUCHDB_URL` and credentials per `src/db/couch.ts` / env.
-- **Docker:** `docker-compose.yml` runs app + CouchDB + Ollama; Compose may set `OLLAMA_MODEL` for the Ollama service—align with app expectations when using auto-sizing.
+- **Docker:** `docker/` holds `Dockerfile`, `docker-compose.yml` (GPU-capable Ollama), and `docker-compose.apple.yml` (macOS Docker Desktop, no `gpus`). From repo root run **`./docker-compose.sh`** or **`docker-compose.ps1`** so the correct compose file is used; see `README.md`.
 
 ---
 
@@ -122,4 +123,5 @@ Examples: `/api/health`, `/api/status`, `/api/trades`, `/api/news`, `/api/trigge
 ## 11. Meta
 
 - **Single onboarding file:** New agents should read **this file first**, then `.env.example`, then targeted source files.
+- **Cursor:** `.cursor/rules/agents-md-first.mdc` (`alwaysApply: true`) instructs the agent to read this file before substantive work and commands.
 - **Stale content:** If you notice drift between this file and the repo, update this file or flag it—stale `AGENTS.md` is a bug.
