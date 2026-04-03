@@ -21,7 +21,7 @@ import {
   AreaChart,
   Area
 } from "recharts";
-import { format } from "date-fns";
+import { safeFormat } from "../lib/safe-format-date.js";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { kalshiBrowseUrlFromTrade, pickTickerLabel } from "../lib/kalshi-links.js";
@@ -206,7 +206,7 @@ export default function Dashboard({ onOpenDocs }: DashboardProps) {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white font-sans selection:bg-orange-500/30">
+    <div className="min-h-screen min-w-0 bg-[#0a0a0a] text-white font-sans selection:bg-orange-500/30">
       {/* Header */}
       <header className="border-b border-white/10 bg-black/50 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
@@ -280,7 +280,9 @@ export default function Dashboard({ onOpenDocs }: DashboardProps) {
             <div className="flex flex-col items-end">
               <span className="text-[10px] uppercase tracking-widest opacity-40">Last Sync</span>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-mono">{format(new Date(status?.lastUpdate), "HH:mm:ss")}</span>
+                <span className="text-sm font-mono">
+                  {safeFormat(status?.lastUpdate, "HH:mm:ss")}
+                </span>
                 <span
                   className={cn(
                     "text-[10px] font-mono font-bold tabular-nums px-2 py-0.5 rounded border border-white/10 bg-white/[0.03]",
@@ -324,9 +326,9 @@ export default function Dashboard({ onOpenDocs }: DashboardProps) {
         </div>
 
         {/* Charts & News Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-          {/* Main Chart */}
-          <div className="lg:col-span-2 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 min-w-0">
+          {/* Main Chart — min-w-0 lets grid tracks shrink in Firefox (avoids zero-width / clipping) */}
+          <div className="lg:col-span-2 space-y-6 min-w-0">
             <div className="bg-[#111] border border-white/5 rounded-xl p-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
                 <h2 className="text-sm font-bold uppercase tracking-widest flex items-center gap-2">
@@ -351,8 +353,8 @@ export default function Dashboard({ onOpenDocs }: DashboardProps) {
                   ))}
                 </div>
               </div>
-              <div className="h-[300px] w-full relative z-0 overflow-hidden">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-[300px] w-full min-w-0 relative z-0 overflow-hidden">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
                   <AreaChart data={portfolioChartData}>
                     <defs>
                       <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
@@ -387,7 +389,7 @@ export default function Dashboard({ onOpenDocs }: DashboardProps) {
                       contentStyle={{ backgroundColor: "#111", border: "1px solid #ffffff10", fontSize: "12px" }}
                       itemStyle={{ color: "#f97316" }}
                       labelFormatter={(ts) =>
-                        typeof ts === "number" ? format(new Date(ts), "MMM d, yyyy HH:mm:ss") : ""
+                        typeof ts === "number" ? safeFormat(ts, "MMM d, yyyy HH:mm:ss", "") : ""
                       }
                       formatter={(value: number | string) => [`$${Number(value).toFixed(2)}`, "Portfolio"]}
                     />
@@ -464,7 +466,9 @@ export default function Dashboard({ onOpenDocs }: DashboardProps) {
                           <div className="text-[10px] font-mono">
                             Score: {typeof trade.tradeRating === "number" ? trade.tradeRating.toFixed(1) : "Pending"}
                           </div>
-                          <div className="text-[10px] opacity-40">{format(new Date(trade.timestamp), "MMM dd, HH:mm")}</div>
+                          <div className="text-[10px] opacity-40">
+                            {safeFormat(trade.timestamp, "MMM dd, HH:mm")}
+                          </div>
                         </div>
                       </>
                     );
@@ -496,7 +500,7 @@ export default function Dashboard({ onOpenDocs }: DashboardProps) {
           </div>
 
           {/* News Sidebar */}
-          <div className="space-y-6">
+          <div className="space-y-6 min-w-0">
             <div className="bg-[#111] border border-white/5 rounded-xl h-full flex flex-col">
               <div className="p-6 border-b border-white/5 flex items-center justify-between">
                 <h2 className="text-sm font-bold uppercase tracking-widest flex items-center gap-2">
@@ -515,7 +519,7 @@ export default function Dashboard({ onOpenDocs }: DashboardProps) {
                         <span className="text-[10px] font-mono uppercase px-2 py-0.5 bg-orange-500/20 text-orange-500 rounded">
                           {item.source}
                         </span>
-                        <span className="text-[10px] opacity-40">{format(new Date(item.timestamp), "HH:mm")}</span>
+                        <span className="text-[10px] opacity-40">{safeFormat(item.timestamp, "HH:mm")}</span>
                       </div>
                       <p className="text-xs leading-relaxed opacity-80">{item.content}</p>
                       <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-2 min-w-0">

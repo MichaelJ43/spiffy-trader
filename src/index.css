@@ -1,1 +1,12 @@
 @import "tailwindcss";
+
+/* Firefox (and some grid/flex layouts) need an explicit minimum width on nested tracks;
+   #root sizing avoids a zero-height root in edge cases. */
+html,
+body {
+  margin: 0;
+}
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
