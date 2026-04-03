@@ -1,14 +1,12 @@
 # Linux / Windows (WSL2) + NVIDIA: Ollama uses `gpus: all`.
-# macOS (Docker Desktop): use docker-compose.apple.yml — see ../docker-compose.sh
+# macOS (Docker Desktop): use docker-compose.apple.yml — see ./docker-compose.sh
 #
 # Run from repo root: ./docker-compose.sh up --build
-# Or: docker compose -f docker/docker-compose.yml --project-directory . up --build
+# Or: docker compose -f docker-compose.yml --project-directory . up --build
 
 services:
   spiffy-trader:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
+    build: .
     ports:
       - "3000:3000"
     environment:

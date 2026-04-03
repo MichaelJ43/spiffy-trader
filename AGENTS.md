@@ -55,7 +55,7 @@ src/trading/              # simulated platform execution
 src/lib/                  # utils, trade-ratings, text-match, portfolio-series, kalshi-links
 src/components/           # Dashboard, DocumentationPage (React)
 tests/                    # unit + integration + ui; setup in tests/setup/
-docker/                   # Dockerfile + compose files; root docker-compose.sh / docker-compose.ps1 wrappers
+# Docker: Dockerfile + docker-compose*.yml at repo root; ./docker-compose.sh / docker-compose.ps1
 ```
 
 **Import convention:** ESM with **`.js` extensions** in import paths for local compiled modules (e.g. `from "./config.js"`). Path alias `@/*` → repo root (see `tsconfig.json`).
@@ -68,7 +68,7 @@ docker/                   # Dockerfile + compose files; root docker-compose.sh /
 - **Server config aggregation:** `src/server/config.ts` — ports, RSS seeds, Ollama URL/model resolution, embed model, Kalshi caps, timeouts, **Gemma 4 auto model** when `OLLAMA_MODEL` unset (`src/server/gemma4-hardware.ts`), etc.
 - **LLM model selection:** If `OLLAMA_MODEL` is **not** set, a Gemma 4 tag is chosen from hardware heuristics. If set, that tag wins. Inspect `GET /api/system/llm-capacity`.
 - **CouchDB:** `COUCHDB_URL` and credentials per `src/db/couch.ts` / env.
-- **Docker:** `docker/` holds `Dockerfile`, `docker-compose.yml` (GPU-capable Ollama), and `docker-compose.apple.yml` (macOS Docker Desktop, no `gpus`). From repo root run **`./docker-compose.sh`** or **`docker-compose.ps1`** so the correct compose file is used; see `README.md`.
+- **Docker:** Repo root has `Dockerfile`, `docker-compose.yml` (GPU-capable Ollama), and `docker-compose.apple.yml` (macOS Docker Desktop, no `gpus`). Run **`./docker-compose.sh`** or **`docker-compose.ps1`** so the correct compose file is used; see `README.md`.
 
 ---
 

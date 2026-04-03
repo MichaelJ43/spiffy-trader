@@ -3,9 +3,7 @@
 
 services:
   spiffy-trader:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
+    build: .
     ports:
       - "3000:3000"
     environment:
