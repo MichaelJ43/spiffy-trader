@@ -19,12 +19,20 @@ export default defineConfig({
       exclude: [
         "src/**/*.d.ts",
         "**/main.tsx",
-        "src/components/**",
-        "src/App.tsx",
         "src/server/http.ts",
         "src/server/monitor.ts",
         "src/kalshi/types.ts"
-      ]
+      ],
+      /**
+       * Global gates on included `src/**` (see exclude list). Branch % is capped lower than lines
+       * because optional paths and defensive branches are unevenly exercised.
+       */
+      thresholds: {
+        lines: 80,
+        statements: 80,
+        functions: 80,
+        branches: 65
+      }
     }
   },
   resolve: {

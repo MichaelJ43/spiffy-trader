@@ -1,8 +1,16 @@
 import { vi } from "vitest";
 
+export type DashboardFetchMockOptions = {
+  newsItems?: unknown[];
+  trades?: unknown[];
+};
+
 /** Minimal JSON responses so Dashboard can mount without a running server. */
-export function createDashboardFetchMock() {
-  return vi.fn(async (input: RequestInfo | URL) => {
+export function createDashboardFetchMock(options?: DashboardFetchMockOptions) {
+  const newsItems = options?.newsItems ?? [];
+  const trades = options?.trades ?? [];
+
+  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (url.includes("/api/status")) {
       return new Response(
@@ -23,13 +31,19 @@ export function createDashboardFetchMock() {
       );
     }
     if (url.includes("/api/trades")) {
-      return new Response(JSON.stringify([]), {
+      return new Response(JSON.stringify(trades), {
         status: 200,
         headers: { "Content-Type": "application/json" }
       });
     }
     if (url.includes("/api/news")) {
-      return new Response(JSON.stringify([]), {
+      return new Response(JSON.stringify(newsItems), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    if (url.includes("/api/trigger") && init?.method === "POST") {
+      return new Response(JSON.stringify({ ok: true }), {
         status: 200,
         headers: { "Content-Type": "application/json" }
       });
