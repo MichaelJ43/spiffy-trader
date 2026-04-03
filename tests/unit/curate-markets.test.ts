@@ -49,4 +49,27 @@ describe("curateMarketsForNews", () => {
     expect(out.some((m) => m.ticker === "DEAD")).toBe(false);
     expect(out.some((m) => m.ticker === "LIVE")).toBe(true);
   });
+
+  it("uses max of headline and expansion embedding so a second theme can rank first", async () => {
+    const { ollamaEmbed } = await import("../../src/ollama/embed.js");
+    kalshiMarketEmbeddingByTicker.clear();
+    const geoPool = [
+      { ticker: "KX-ZZZ", title: "ZZZ headline-aligned", volume_24h: 50, volume: 50, open_interest: 1 },
+      { ticker: "KX-AAA", title: "AAA expansion-aligned", volume_24h: 50, volume: 50, open_interest: 1 }
+    ];
+    kalshiMarketEmbeddingByTicker.set("KX-ZZZ", [1, 0, 0]);
+    kalshiMarketEmbeddingByTicker.set("KX-AAA", [0, 1, 0]);
+
+    vi.mocked(ollamaEmbed).mockReset();
+    vi.mocked(ollamaEmbed).mockResolvedValue([1, 0, 0]);
+    const withoutExp = await curateMarketsForNews("irrelevant tokens xyzabc", geoPool, 1);
+    expect(withoutExp[0]?.ticker).toBe("KX-ZZZ");
+
+    vi.mocked(ollamaEmbed).mockReset();
+    vi.mocked(ollamaEmbed).mockResolvedValueOnce([1, 0, 0]).mockResolvedValueOnce([0, 1, 0]);
+    const withExp = await curateMarketsForNews("irrelevant tokens xyzabc", geoPool, 1, {
+      expansionText: "oil energy channel"
+    });
+    expect(withExp[0]?.ticker).toBe("KX-AAA");
+  });
 });

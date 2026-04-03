@@ -210,6 +210,14 @@ export const KALSHI_CURATED_MARKETS_FOR_LLM = Math.min(
   Math.max(8, Number(process.env.KALSHI_CURATED_MARKETS_FOR_LLM) || 35)
 );
 
+/**
+ * Before embedding/token curation, ask the LLM for headline → transmission channels (commodities,
+ * macro, downstream themes). Set false to skip the extra generate call (keyword/embedding-only).
+ */
+export const NEWS_CURATION_EXPANSION_ENABLED = !["0", "false", "no", "off"].includes(
+  String(process.env.NEWS_CURATION_EXPANSION_ENABLED ?? "true").toLowerCase()
+);
+
 /** Minimum gap between Kalshi HTTP calls (pagination + per-ticker quotes). */
 export const KALSHI_MIN_INTERVAL_MS = Math.max(
   0,

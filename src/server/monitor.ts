@@ -1,5 +1,6 @@
 import { discoverNewSources } from "../ai/source-discovery.js";
 import { generateJsonWithLlm } from "../ai/llm-json.js";
+import { expandNewsForMarketCuration } from "../ai/news-curation-expansion.js";
 import { getGeminiClient } from "../ai/gemini.js";
 import { couchRequest, upsertStatus } from "../db/couch.js";
 import { listDocs } from "../db/documents.js";
@@ -33,6 +34,7 @@ import { executeTradeOnPlatform, resolveTrades } from "../trading/platform.js";
 import {
   clamp,
   KALSHI_CURATED_MARKETS_FOR_LLM,
+  NEWS_CURATION_EXPANSION_ENABLED,
   MONITOR_MIN_PERIOD_MS,
   MONITOR_POST_LOOP_MS,
   OLLAMA_URL,
@@ -171,10 +173,23 @@ export async function monitorAndTrade() {
         deltaMs: r.deltaMs
       }));
 
+      let curationExpansion: string | null = null;
+      if (NEWS_CURATION_EXPANSION_ENABLED) {
+        curationExpansion = await expandNewsForMarketCuration(item.content, currentAi);
+        if (curationExpansion) {
+          console.log(
+            `Kalshi curation: transmission channels (${curationExpansion.slice(0, 120)}${
+              curationExpansion.length > 120 ? "…" : ""
+            })`
+          );
+        }
+      }
+
       const curatedMarkets = await curateMarketsForNews(
         item.content,
         kalshiOpenMarketsCache,
-        KALSHI_CURATED_MARKETS_FOR_LLM
+        KALSHI_CURATED_MARKETS_FOR_LLM,
+        { expansionText: curationExpansion }
       );
       const allowedTickerSet = new Set(curatedMarkets.map((m) => m.ticker));
       const sourceRow = sortedSources.find((s) => s.url === item.sourceUrl);

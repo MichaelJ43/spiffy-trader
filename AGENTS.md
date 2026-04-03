@@ -31,7 +31,7 @@
 
 1. **News sources:** Weighted list from CouchDB `news_sources` + seeds from `src/server/config.ts` (`SEED_NEWS_*`). Source discovery can add URLs via LLM (`src/ai/source-discovery.ts`).
 2. **RSS:** `src/rss/fetch.ts`, backoff `src/rss/backoff.ts`; items stored in CouchDB `news`.
-3. **Markets:** Kalshi open markets cached (`src/kalshi/cache.ts`, `kalshi_markets` DB); embeddings optional via `src/ollama/embed.ts` + `src/kalshi/curate.ts` (fallback token overlap `src/lib/text-match.ts`).
+3. **Markets:** Kalshi open markets cached (`src/kalshi/cache.ts`, `kalshi_markets` DB); embeddings optional via `src/ollama/embed.ts` + `src/kalshi/curate.ts` (fallback token overlap `src/lib/text-match.ts`). When enabled (`NEWS_CURATION_EXPANSION_ENABLED`, default on), `src/ai/news-curation-expansion.ts` asks the LLM for headline **transmission channels** (commodities, macro, downstream themes); curation uses **max** of headline vs expansion embedding similarity so butterfly-effect markets are not keyword-starved.
 4. **LLM:** `src/ai/llm-json.ts` → Ollama `/api/generate` with `format: "json"`, optional Gemini fallback. Prompts in `src/kalshi/prompts.ts` (trade decision, related stories, simulation idle context).
 5. **Execution:** `src/trading/platform.ts` — simulation only; fees `src/kalshi/fees.ts`, pricing `src/kalshi/pricing.ts`.
 6. **State:** Trades in `trades` DB; bot status in `status`; portfolio halt `src/server/portfolio-halt.ts`.
@@ -46,7 +46,7 @@ src/db.ts                 # CouchDB URL + database names (env-overridable)
 src/db/                   # init, couch helpers, documents, kalshi snapshot, market_watchlist
 src/server/               # http, monitor, config, state, portfolio-*, gemma4-hardware (LLM sizing heuristics)
 src/kalshi/               # API client, cache, curate, prompts, fees, pricing, ws (optional), types
-src/ai/                   # llm-json, gemini, source-discovery, exit-review
+src/ai/                   # llm-json, gemini, source-discovery, news-curation-expansion, exit-review
 src/ollama/               # embeddings, reachability
 src/rss/                  # fetch + backoff
 src/news/                 # related-stories for prompt context
