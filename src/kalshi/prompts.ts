@@ -1,4 +1,5 @@
 import type { RelatedStoryPromptSlice } from "../news/related-stories.js";
+import { coerceStoredNewsScores } from "../lib/news-scores.js";
 import { IDLE_NARRATIVE_FIRST_TIER_MINUTES } from "../server/config.js";
 import { KALSHI_TAKER_FEE_COEFFICIENT } from "./fees.js";
 import type { KalshiMarketLite } from "./types.js";
@@ -113,21 +114,6 @@ export type NormalizedTradeDecision = {
   reasoning: string;
 };
 
-function clampScore(n: number): number {
-  if (!Number.isFinite(n)) return 0;
-  return Math.max(0, Math.min(100, Math.round(n)));
-}
-
-/** Relevance-heavy blend so Impact stays on a similar scale to the legacy single score (edge is often conservative). */
-const IMPACT_WEIGHT_RELEVANCE = 0.7;
-const IMPACT_WEIGHT_EDGE = 0.3;
-
-function deriveImpactScore(relevanceScore: number, edgeScore: number): number {
-  return clampScore(
-    IMPACT_WEIGHT_RELEVANCE * relevanceScore + IMPACT_WEIGHT_EDGE * edgeScore
-  );
-}
-
 const RELATED_VERDICTS = ["same_narrative", "new_fact", "unclear"] as const;
 
 /**
@@ -157,31 +143,7 @@ export function normalizeTradeDecisionAnalysis(raw: any): NormalizedTradeDecisio
     relatedNarrativeWhatChanged = String(raw.relatedNarrativeWhatChanged).slice(0, 2000);
   }
 
-  const relRaw = Number(raw.relevanceScore);
-  const edgeRaw = Number(raw.edgeScore);
-  const hasRel = Number.isFinite(relRaw);
-  const hasEdge = Number.isFinite(edgeRaw);
-  const legacyImpact = clampScore(Number(raw.impactScore));
-
-  let relevanceScore = hasRel ? clampScore(relRaw) : 0;
-  let edgeScore = hasEdge ? clampScore(edgeRaw) : 0;
-
-  if (!hasRel && !hasEdge && legacyImpact > 0) {
-    relevanceScore = legacyImpact;
-    edgeScore = legacyImpact;
-  } else if (!hasRel && hasEdge) {
-    relevanceScore = edgeScore;
-  } else if (hasRel && !hasEdge) {
-    edgeScore = relevanceScore;
-  }
-
-  // Models often echo template 0/0; if they still emit legacy impactScore, trust it.
-  if (relevanceScore === 0 && edgeScore === 0 && legacyImpact > 0) {
-    relevanceScore = legacyImpact;
-    edgeScore = legacyImpact;
-  }
-
-  const impactScore = deriveImpactScore(relevanceScore, edgeScore);
+  const { relevanceScore, edgeScore, impactScore } = coerceStoredNewsScores(raw);
 
   const shouldTrade = raw.shouldTrade === true;
   const suggestedTicker = String(raw.suggestedTicker ?? "").trim();
