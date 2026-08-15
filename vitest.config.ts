@@ -2,17 +2,16 @@ import path from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
-const sharedTest = {
-  globals: true,
-  pool: "forks" as const,
-  testTimeout: 20_000,
-  setupFiles: ["./tests/setup/vitest.setup.ts"]
-};
-
 export default defineConfig({
   plugins: [react()],
   test: {
-    ...sharedTest,
+    globals: true,
+    environment: "node",
+    environmentMatchGlobs: [["tests/ui/**", "jsdom"]],
+    setupFiles: ["./tests/setup/vitest.setup.ts"],
+    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
+    pool: "forks",
+    testTimeout: 20_000,
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],
@@ -34,27 +33,7 @@ export default defineConfig({
         functions: 80,
         branches: 65
       }
-    },
-    projects: [
-      {
-        extends: true,
-        test: {
-          ...sharedTest,
-          name: "unit",
-          include: ["tests/**/*.test.ts"],
-          environment: "node"
-        }
-      },
-      {
-        extends: true,
-        test: {
-          ...sharedTest,
-          name: "ui",
-          include: ["tests/ui/**/*.test.tsx"],
-          environment: "jsdom"
-        }
-      }
-    ]
+    }
   },
   resolve: {
     alias: {
